@@ -1,0 +1,108 @@
+{
+  "engine": "/data/indic-transcribe-flex-trtllm-engine/encoder/encoder.plan",
+  "engine_bytes": 1889261332,
+  "num_profiles": 1,
+  "tensors": [
+    {
+      "name": "audio_signal",
+      "mode": "TensorIOMode.INPUT",
+      "dtype": "DataType.FLOAT",
+      "engine_shape": [
+        -1,
+        128,
+        -1
+      ],
+      "profile": {
+        "min": [
+          1,
+          128,
+          32
+        ],
+        "opt": [
+          64,
+          128,
+          1516
+        ],
+        "max": [
+          64,
+          128,
+          3001
+        ]
+      },
+      "runtime_shape": [
+        1,
+        128,
+        32
+      ]
+    },
+    {
+      "name": "length",
+      "mode": "TensorIOMode.INPUT",
+      "dtype": "DataType.INT64",
+      "engine_shape": [
+        -1
+      ],
+      "profile": {
+        "min": [
+          1
+        ],
+        "opt": [
+          64
+        ],
+        "max": [
+          64
+        ]
+      },
+      "runtime_shape": [
+        1
+      ]
+    },
+    {
+      "name": "encoded_outputs",
+      "mode": "TensorIOMode.OUTPUT",
+      "dtype": "DataType.FLOAT",
+      "engine_shape": [
+        -1,
+        -1,
+        1024
+      ],
+      "runtime_shape": [
+        1,
+        4,
+        1024
+      ]
+    },
+    {
+      "name": "encoded_lengths",
+      "mode": "TensorIOMode.OUTPUT",
+      "dtype": "DataType.INT64",
+      "engine_shape": [
+        -1
+      ],
+      "runtime_shape": [
+        1
+      ]
+    }
+  ],
+  "minimum_profile_execution": "passed",
+  "outputs": [
+    {
+      "name": "encoded_outputs",
+      "shape": [
+        1,
+        4,
+        1024
+      ],
+      "finite": true,
+      "mean_abs": 0.1258535385131836
+    },
+    {
+      "name": "encoded_lengths",
+      "shape": [
+        1
+      ],
+      "finite": true,
+      "mean_abs": 4.0
+    }
+  ]
+}

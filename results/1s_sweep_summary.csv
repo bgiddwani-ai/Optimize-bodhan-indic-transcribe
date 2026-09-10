@@ -1,0 +1,4 @@
+duration,concurrency,trials,audio_seconds,rtfx_median,rtfx_min,rtfx_max,run_seconds_median,latency_median_ms,p95_ms_median,executions_median,all_outputs_present,all_predictions_nonempty
+1s,64,2,64.0,118.41,115.63,121.19,0.5407949999999999,424.74,536.97,3.0,True,True
+1s,128,2,128.0,147.07999999999998,146.5,147.66,0.870285,662.81,861.865,4.0,True,True
+1s,256,2,256.0,173.28500000000003,171.05,175.52,1.47755,957.77,1462.8,6.0,True,True

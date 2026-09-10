@@ -1,0 +1,19 @@
+{
+  "restored_class": "EncDecMultiTaskModel",
+  "parameters": 1221439472,
+  "state_tensors": 1926,
+  "source_tensors_checked": 1923,
+  "encoder_layers": 32,
+  "decoder_layers": 24,
+  "vocab_size": 7152,
+  "prompt_format": "canary2",
+  "tokenizer_lang_groups": [
+    "spl_tokens",
+    "multilingual"
+  ],
+  "bos_id": 4,
+  "eos_id": 3,
+  "pad_id": 2,
+  "tied_lm_head_exact": true,
+  "unequal_source_tensors": []
+}

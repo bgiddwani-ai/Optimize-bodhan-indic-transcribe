@@ -1,0 +1,34 @@
+# Extends the nemo:latest image with sarvam-omni-nemo installed in editable mode.
+# Build with (run from the sarvam-omni-nemo directory):
+#   cd /projects/data/speechteam/projects/projects/omni-nemo-code/sarvam-omni-nemo
+#   sudo docker build -f /projects/data/speechteam/kaushal/NeMo/docker/Dockerfile.speech.avlm -t nemo:avlm .
+
+ARG BASE_IMAGE=nemo:latest
+FROM ${BASE_IMAGE}
+
+# Install the Megatron-LM commit required by sarvam-omni-nemo (has AttnBackend)
+ARG MCORE_TAG=03f7793114aa49af8ad7ac5eb70affe56f5f28ea
+RUN pip uninstall -y megatron-core && \
+    cd /tmp && \
+    git clone https://github.com/NVIDIA/Megatron-LM.git && \
+    cd Megatron-LM && \
+    git checkout ${MCORE_TAG} && \
+    pip install . && \
+    cd /tmp && rm -rf Megatron-LM
+
+# Reinstall TransformerEngine from source so it links against the CUDA 12.4 in this image.
+# PyPI wheels require libcublas.so.13 (CUDA 12.8+) which is not present here.
+ARG TE_TAG=f05f12c974b37c5bd8dfca3d2d294be53b66abfa
+RUN pip uninstall -y transformer-engine transformer_engine && \
+    cd /tmp && \
+    git clone https://github.com/NVIDIA/TransformerEngine.git && \
+    cd TransformerEngine && \
+    git fetch origin ${TE_TAG} && \
+    git checkout FETCH_HEAD && \
+    git submodule init && git submodule update && \
+    NVTE_FRAMEWORK=pytorch NVTE_WITH_USERBUFFERS=1 MPI_HOME=/usr/local/mpi pip install . && \
+    cd /tmp && rm -rf TransformerEngine
+
+# Copy sarvam-omni-nemo source (build context = sarvam-omni-nemo dir) and install in editable mode
+COPY . /opt/sarvam-omni-nemo
+RUN pip install -e /opt/sarvam-omni-nemo

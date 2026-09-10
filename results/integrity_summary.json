@@ -1,0 +1,77 @@
+{
+  "all_predictions_nonempty": true,
+  "all_requested_rows_present": true,
+  "all_trials_deterministic_as_multisets": true,
+  "audio_checks": {
+    "15s": {
+      "all_exact": true,
+      "expected_seconds": 15.0,
+      "files": 29,
+      "max_seconds": 15.0,
+      "min_seconds": 15.0
+    },
+    "5s": {
+      "all_exact": true,
+      "expected_seconds": 5.0,
+      "files": 88,
+      "max_seconds": 5.0,
+      "min_seconds": 5.0
+    }
+  },
+  "paths_with_multiple_transcripts": 0,
+  "result_files": 18,
+  "trial_consistency": {
+    "15s_c128": true,
+    "15s_c256": true,
+    "15s_c64": true,
+    "5s_c128": true,
+    "5s_c256": true,
+    "5s_c64": true,
+    "full_c128": true,
+    "full_c256": true,
+    "full_c64": true
+  },
+  "unique_audio_paths": 157,
+  "1s": {
+    "audio_files": 442,
+    "exact_duration_files": 442,
+    "bad_audio": [],
+    "result_checks": {
+      "1s_c64_trial1": {
+        "rows": 64,
+        "expected_rows": 64,
+        "nonempty": 64
+      },
+      "1s_c64_trial2": {
+        "rows": 64,
+        "expected_rows": 64,
+        "nonempty": 64
+      },
+      "1s_c64_deterministic_multiset": true,
+      "1s_c128_trial1": {
+        "rows": 128,
+        "expected_rows": 128,
+        "nonempty": 128
+      },
+      "1s_c128_trial2": {
+        "rows": 128,
+        "expected_rows": 128,
+        "nonempty": 128
+      },
+      "1s_c128_deterministic_multiset": true,
+      "1s_c256_trial1": {
+        "rows": 256,
+        "expected_rows": 256,
+        "nonempty": 256
+      },
+      "1s_c256_trial2": {
+        "rows": 256,
+        "expected_rows": 256,
+        "nonempty": 256
+      },
+      "1s_c256_deterministic_multiset": true
+    },
+    "audio_paths_with_multiple_transcripts": 0,
+    "all_checks_passed": true
+  }
+}

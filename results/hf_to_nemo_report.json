@@ -1,0 +1,25 @@
+{
+  "format": "NeMo EncDecMultiTaskModel archive",
+  "source_hf_dir": "/source-model",
+  "base_template_dir": "/base-canary",
+  "output": "/data/indic-transcribe-flex.nemo",
+  "output_sha256": "6251792ac4f25324a52fa436293183ec0e8b8d33568b49c2111ed93ff875af00",
+  "tensor_count": 1926,
+  "encoder_layers": 32,
+  "decoder_layers": 24,
+  "vocab_size": 7152,
+  "missing_tensors": [],
+  "unexpected_tensors": [],
+  "shape_mismatches": [],
+  "tied_lm_head_exact": true,
+  "tokenizer_layout": {
+    "spl_tokens": [
+      0,
+      1152
+    ],
+    "multilingual": [
+      1152,
+      7152
+    ]
+  }
+}

@@ -1,0 +1,77 @@
+Loading eval dataset...
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0000.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0001.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0002.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0003.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0004.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0005.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0006.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0007.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0008.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0009.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0010.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0011.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0012.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0013.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0014.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0015.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0016.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0017.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0018.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0019.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0020.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0021.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0022.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0023.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0024.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0025.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0026.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0027.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0028.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0000.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0001.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0002.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0003.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0004.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0005.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0006.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0007.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0008.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0009.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0010.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0011.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0012.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0013.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0014.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0015.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0016.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0017.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0018.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0019.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0020.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0021.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0022.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0023.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0024.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0025.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0026.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0027.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0028.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0000.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0001.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0002.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0003.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0004.flac
+filename: /data/dataset/chunk_sweep/15s/audio/chunk_0005.flac
+Done loading 64 files
+Done processing 64 responses
+Latencies (ms):
+		Median		90th		95th		99th		Avg
+		1844		1853.9		1857.4		2218.9		1833.9
+Run time: 2.2418 sec.
+Total audio processed: 960 sec.
+Throughput: 428.23 RTFX
+Final transcripts written to /data/dataset/chunk_sweep/results/15s_c64_trial1.json
+
+STDERR
+I0910 03:12:30.188665 173245 grpc.h:108] Using Insecure Server Credentials

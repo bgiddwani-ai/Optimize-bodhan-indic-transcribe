@@ -1,0 +1,1738 @@
+diff --git a/docker/Dockerfile.speech b/docker/Dockerfile.speech
+index 65e55987dc..553e7a10bf 100644
+--- a/docker/Dockerfile.speech
++++ b/docker/Dockerfile.speech
+@@ -144,7 +144,8 @@ RUN /usr/bin/test -n "$NEMO_VERSION" && \
+   /bin/echo "export BASE_IMAGE=${BASE_IMAGE}" >> /root/.bashrc
+ 
+ # Install NeMo
+-RUN --mount=from=nemo-src,target=/tmp/nemo,rw cd /tmp/nemo && pip install ".[all]"
++COPY --from=nemo-src / /tmp/nemo
++RUN cd /tmp/nemo && pip install ".[all]"
+ 
+ # Check install
+ # NB: adjusting LD_LIBRARY_PATH (only here, should not be persistent!) is a temporary hack
+@@ -184,3 +185,15 @@ RUN INSTALL_MSG=$(/bin/bash /tmp/nemo/scripts/installers/install_ais_cli_latest.
+   exit ${INSTALL_CODE}; \
+   else echo "Skipping AIS CLI installation"; fi \
+   else echo "AIS CLI installed successfully"; fi
++
++# Fix package versions for training compatibility
++RUN pip install "torchmetrics==1.2.1" && \
++  pip uninstall -y torchvision && \
++  pip install "tensorboard>=2.16" && \
++  pip uninstall -y numba-cuda
++
++# Reinstall PyTorch for CUDA 12.4 to be compatible with driver 535.x (forward compat to CUDA 12.5).
++# The base image ships PyTorch built for cu126 which requires driver >= 560.x.
++RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
++RUN pip install --upgrade --force-reinstall soxr
++RUN pip install indic-nlp-library
+diff --git a/docker/common/install_dep.sh b/docker/common/install_dep.sh
+old mode 100755
+new mode 100644
+diff --git a/docs/check_for_broken_links.sh b/docs/check_for_broken_links.sh
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/datatable_filter.png b/docs/source/tools/images/datatable_filter.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/datatable_sort.png b/docs/source/tools/images/datatable_sort.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/datatable_toggle.png b/docs/source/tools/images/datatable_toggle.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_base_stats.png b/docs/source/tools/images/sde_base_stats.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_mls_cer.png b/docs/source/tools/images/sde_mls_cer.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_mls_player.png b/docs/source/tools/images/sde_mls_player.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_mls_words.png b/docs/source/tools/images/sde_mls_words.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_player.png b/docs/source/tools/images/sde_player.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_samples.png b/docs/source/tools/images/sde_samples.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_stats.png b/docs/source/tools/images/sde_stats.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_utterances.png b/docs/source/tools/images/sde_utterances.png
+old mode 100755
+new mode 100644
+diff --git a/docs/source/tools/images/sde_words.png b/docs/source/tools/images/sde_words.png
+old mode 100755
+new mode 100644
+diff --git a/docs/update_docs_docker.sh b/docs/update_docs_docker.sh
+old mode 100755
+new mode 100644
+diff --git a/examples/asr/asr_hybrid_transducer_ctc/speech_to_text_hybrid_rnnt_ctc_bpe.py b/examples/asr/asr_hybrid_transducer_ctc/speech_to_text_hybrid_rnnt_ctc_bpe.py
+index ffda4c554a..ffcdde7b04 100644
+--- a/examples/asr/asr_hybrid_transducer_ctc/speech_to_text_hybrid_rnnt_ctc_bpe.py
++++ b/examples/asr/asr_hybrid_transducer_ctc/speech_to_text_hybrid_rnnt_ctc_bpe.py
+@@ -58,10 +58,11 @@ https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/configs.ht
+ 
+ """
+ 
++import torch
+ import lightning.pytorch as pl
+-from omegaconf import OmegaConf
++from omegaconf import OmegaConf, open_dict
+ 
+-from nemo.collections.asr.models import EncDecHybridRNNTCTCBPEModel
++from nemo.collections.asr.models import EncDecHybridRNNTCTCBPEModel, EncDecRNNTBPEModel
+ from nemo.core.config import hydra_runner
+ from nemo.utils import logging
+ from nemo.utils.exp_manager import exp_manager
+@@ -74,19 +75,34 @@ from nemo.utils.trainer_utils import resolve_trainer_cfg
+ def main(cfg):
+     logging.info(f'Hydra config: {OmegaConf.to_yaml(cfg)}')
+ 
++    # Remove test_ds entirely to avoid IncompleteConfigError during model init
++    if hasattr(cfg.model, 'test_ds'):
++        with open_dict(cfg.model):
++            del cfg.model.test_ds
++
++    torch.set_float32_matmul_precision("medium")
+     trainer = pl.Trainer(**resolve_trainer_cfg(cfg.trainer))
+     exp_manager(trainer, cfg.get("exp_manager", None))
++
+     asr_model = EncDecHybridRNNTCTCBPEModel(cfg=cfg.model, trainer=trainer)
+ 
+-    # Initialize the weights of the model from another model, if provided via config
+-    asr_model.maybe_init_from_pretrained_checkpoint(cfg)
++    # Load encoder weights from pretrained model.
++    # Only the encoder is transferred — preprocessor (mel bins), joint, and vocab sizes differ
++    # between the pretrained English model and the target multilingual model.
++    if hasattr(cfg, 'init_from_pretrained_model'):
++        model_cfg = list(cfg.init_from_pretrained_model.values())[0]
++        pretrained_name = model_cfg.name
++        logging.info(f"Loading encoder weights from pretrained model: {pretrained_name}")
++        with torch.no_grad():
++            pretrained_model = EncDecRNNTBPEModel.from_pretrained(model_name=pretrained_name, map_location='cpu')
++            pretrained_model.freeze()
++        asr_model.encoder.load_state_dict(pretrained_model.encoder.state_dict(), strict=False)
++        logging.info("Encoder weights loaded successfully.")
++        del pretrained_model
++        torch.cuda.empty_cache()
+ 
+     trainer.fit(asr_model)
+ 
+-    if hasattr(cfg.model, 'test_ds') and cfg.model.test_ds.manifest_filepath is not None:
+-        if asr_model.prepare_test(trainer):
+-            trainer.test(asr_model)
+-
+ 
+ if __name__ == '__main__':
+     main()  # noqa pylint: disable=no-value-for-parameter
+diff --git a/examples/asr/conf/fastconformer/hybrid_transducer_ctc/fastconformer_hybrid_tdt_ctc_bpe.yaml b/examples/asr/conf/fastconformer/hybrid_transducer_ctc/fastconformer_hybrid_tdt_ctc_bpe.yaml
+old mode 100755
+new mode 100644
+diff --git a/nemo/collections/asr/data/audio_to_text_lhotse_prompt.py b/nemo/collections/asr/data/audio_to_text_lhotse_prompt.py
+index 181825b343..1ccda1e352 100644
+--- a/nemo/collections/asr/data/audio_to_text_lhotse_prompt.py
++++ b/nemo/collections/asr/data/audio_to_text_lhotse_prompt.py
+@@ -46,6 +46,11 @@ class LhotseSpeechToTextBpeDatasetWithPrompt(torch.utils.data.Dataset):
+         self.tokenizer = TokenizerWrapper(tokenizer)
+         self.load_audio = AudioSamples(fault_tolerant=True)
+         self.cfg = cfg
++        # When prepend_lang_token is true in the dataset config, the lang-tag token
++        # (e.g. <hi>) is prepended to every transcript target so the decoder learns
++        # to predict the language before the transcription.
++        # Requires a 'lang' sub-tokenizer in the aggregate tokenizer.
++        self._prepend_lang_token = cfg.get('prepend_lang_token', False)
+ 
+         # Calculate num_sample_per_mel_frame from config
+         sample_rate = cfg.get('sample_rate', 16000)
+@@ -64,6 +69,11 @@ class LhotseSpeechToTextBpeDatasetWithPrompt(torch.utils.data.Dataset):
+         # Field to use for prompt key (default to 'language')
+         self.prompt_field = cfg.get('prompt_field', 'language')
+ 
++        # Probability of replacing the true language prompt with unk during training.
++        # Set to 0.0 to disable (e.g. for validation). The unk key must be present in prompt_dictionary.
++        self.unk_prob = cfg.get('unk_prob', 0.0)
++        self.unk_key = cfg.get('unk_key', 'unk')
++
+     def _get_prompt_index(self, prompt_key: str) -> int:
+         """
+         Maps prompt keys to indices using the prompt dictionary.
+@@ -89,10 +99,12 @@ class LhotseSpeechToTextBpeDatasetWithPrompt(torch.utils.data.Dataset):
+         # Initialize prompt target matrix
+         mask = np.zeros((num_prompts, encoder_hidden_len))
+ 
+-        # Get prompt index - default to language if prompt not specified
+-        # revise supervisions to include prompt key
+-        # prompt_key = getattr(cut.supervisions[0].custom_fields, cut.supervisions[0].language)cut.supervisions[0].custom_fields,
+-        prompt_id = self._get_prompt_index(cut.supervisions[0].language)
++        # Get prompt index; with probability unk_prob substitute the true language with unk.
++        # Fall back to cut-level 'lang' tag (from input_cfg tags: {lang: <code>}) when supervision.language is absent.
++        lang = cut.supervisions[0].language or getattr(cut, "lang", None)
++        if self.unk_prob > 0.0 and np.random.random() < self.unk_prob:
++            lang = self.unk_key
++        prompt_id = self._get_prompt_index(lang)
+ 
+         # Set the corresponding prompt ID to 1 for all time steps
+         mask[prompt_id, :] = 1
+@@ -110,12 +122,30 @@ class LhotseSpeechToTextBpeDatasetWithPrompt(torch.utils.data.Dataset):
+             hidden_length (int): The calculated hidden length in terms of the number of frames.
+         """
+         mel_frame_count = math.ceil((num_samples + 1) / self.num_sample_per_mel_frame)
+-        hidden_length = math.ceil(mel_frame_count / self.subsampling_factor)
++        # +1 to ensure prompt length >= encoder output length for all edge cases;
++        # forward() clips prompt to encoded length when over-estimated.
++        hidden_length = math.ceil(mel_frame_count / self.subsampling_factor) + 1
+         return int(hidden_length)
+ 
+     def __getitem__(self, cuts) -> Tuple[torch.Tensor, ...]:
+         audio, audio_lens, cuts = self.load_audio(cuts)
+-        tokens = [torch.as_tensor(self.tokenizer(c.supervisions[0].text, c.supervisions[0].language)) for c in cuts]
++        tokens = []
++        for c in cuts:
++            lang = c.supervisions[0].language or getattr(c, "lang", None)
++            if self._prepend_lang_token:
++                # Prepend <lang> token (e.g. <hi>) from the 'lang' sub-tokenizer,
++                # then append the transcript tokens from the language sub-tokenizer.
++                # Both use the same AggregateTokenizer offset space so IDs are valid.
++                #
++                # Must use token_to_id (piece_to_id path) rather than text_to_ids
++                # (encode_as_ids path): SentencePiece's encoder trie doesn't recognise
++                # USER_DEFINED tokens injected via the protobuf API, so encode_as_ids
++                # always returns [0] (<unk>) for every lang tag token.
++                lang_tag_id = self.tokenizer._tokenizer.token_to_id(f'<{lang}>', 'lang')
++                text_tok = self.tokenizer(c.supervisions[0].text, lang)
++                tokens.append(torch.as_tensor([lang_tag_id] + text_tok))
++            else:
++                tokens.append(torch.as_tensor(self.tokenizer(c.supervisions[0].text, lang)))
+ 
+         # Create prompt targets
+         prompt_targets = [
+@@ -146,6 +176,7 @@ class LhotseSpeechToTextBpeDatasetWithPrompt(torch.utils.data.Dataset):
+             tokens,  # Text tokens
+             token_lens,  # Token lengths
+             prompt_targets,  # Prompt targets
++            cuts,  # Lhotse cuts (used by ASRPredictionWriter)
+         )
+ 
+ 
+diff --git a/nemo/collections/asr/data/audio_to_text_lhotse_prompted.py b/nemo/collections/asr/data/audio_to_text_lhotse_prompted.py
+index a3510a7883..bbeaec0751 100644
+--- a/nemo/collections/asr/data/audio_to_text_lhotse_prompted.py
++++ b/nemo/collections/asr/data/audio_to_text_lhotse_prompted.py
+@@ -79,9 +79,14 @@ class PromptedAudioToTextLhotseDataset(torch.utils.data.Dataset):
+         tokenizer: TokenizerSpec,
+         prompt: PromptFormatter,
+         enable_chunking: bool = False,
++        max_token_len: Optional[int] = None,
+     ):
+         super().__init__()
+         self.tokenizer = tokenizer
++        # Drop any cut whose prompted-transcript would overflow the decoder's positional
++        # embedding. None disables filtering. Lhotse's TokenCountFilter is a no-op on
++        # Cut objects (sampling.py: isinstance(example, Cut) -> True), so we filter here.
++        self.max_token_len = max_token_len
+         self.use_ais_get_batch = os.environ.get("USE_AIS_GET_BATCH", "False").lower() == "true"
+ 
+         # Try to use use_batch_loader if available (Lhotse >= 1.32.0)
+@@ -128,12 +133,38 @@ class PromptedAudioToTextLhotseDataset(torch.utils.data.Dataset):
+         pre_formatted = all(hasattr(c, a) for c in cuts for a in attrs)
+         if pre_formatted:
+             prompts_with_answers, prompts, answers = zip(*((c.input_ids, c.context_ids, c.answer_ids) for c in cuts))
++            prompts_with_answers = list(prompts_with_answers)
++            prompts = list(prompts)
++            answers = list(answers)
+         else:
+             formatted = [apply_prompt_format_fn(cut, self.prompt) for cut in cuts]
+             prompts_with_answers = [ex["input_ids"] for ex in formatted]
+             prompts = [ex["context_ids"] for ex in formatted]
+             answers = [ex["answer_ids"] for ex in formatted]
+ 
++        if self.max_token_len is not None:
++            keep_idx = [
++                i for i, p in enumerate(prompts_with_answers) if len(p) <= self.max_token_len
++            ]
++            if len(keep_idx) < len(prompts_with_answers):
++                dropped = [
++                    (cuts[i].id, len(prompts_with_answers[i]))
++                    for i in range(len(prompts_with_answers)) if i not in set(keep_idx)
++                ]
++                import logging
++                logging.warning(
++                    f"PromptedAudioToTextLhotseDataset: dropping {len(dropped)} cut(s) with "
++                    f"prompted_transcript length > max_token_len={self.max_token_len}: {dropped}"
++                )
++                if not keep_idx:
++                    return None
++                prompts_with_answers = [prompts_with_answers[i] for i in keep_idx]
++                prompts = [prompts[i] for i in keep_idx]
++                answers = [answers[i] for i in keep_idx]
++                audio = audio[keep_idx]
++                audio_lens = audio_lens[keep_idx]
++                cuts = CutSet.from_cuts([cuts[i] for i in keep_idx])
++
+         transcript, transcript_lens = self._collate_tokens(answers)
+         prompts_with_answers, prompts_with_answers_lens = self._collate_tokens(prompts_with_answers)
+         prompts, prompt_lens = self._collate_tokens(prompts)
+diff --git a/nemo/collections/asr/inference/factory/base_builder.py b/nemo/collections/asr/inference/factory/base_builder.py
+index cae8b8a4de..75064f7fc5 100644
+--- a/nemo/collections/asr/inference/factory/base_builder.py
++++ b/nemo/collections/asr/inference/factory/base_builder.py
+@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
+ from omegaconf import open_dict
+ from omegaconf.dictconfig import DictConfig
+ 
++from nemo.collections.asr.inference.model_wrappers.aed_inference_wrapper import AEDInferenceWrapper
+ from nemo.collections.asr.inference.model_wrappers.cache_aware_ctc_inference_wrapper import (
+     CacheAwareCTCInferenceWrapper,
+ )
+@@ -85,12 +86,22 @@ class BaseBuilder:
+ 
+         asr_decoding_type = ASRDecodingType.from_str(cfg.asr_decoding_type)
+         pipeline_type = PipelineType.from_str(cfg.pipeline_type)
++
++        # Support both 'model_name' and 'model_path' config keys so that
++        # .nemo checkpoint paths can be specified under either name.
++        asr_cfg = cfg.asr
++        model_name = asr_cfg.get("model_name") or asr_cfg.get("model_path")
++        if model_name is None:
++            raise ValueError(
++                "ASR config must contain either 'model_name' or 'model_path' to specify the model."
++            )
++
+         model_params = {
+-            "model_name": cfg.asr.model_name,
+-            "device": cfg.asr.device,
+-            "device_id": cfg.asr.device_id,
+-            "compute_dtype": cfg.asr.compute_dtype,
+-            "use_amp": cfg.asr.use_amp,
++            "model_name": model_name,
++            "device": asr_cfg.device,
++            "device_id": asr_cfg.device_id,
++            "compute_dtype": asr_cfg.compute_dtype,
++            "use_amp": asr_cfg.use_amp,
+             "decoding_cfg": decoding_cfg,
+         }
+         match (asr_decoding_type, pipeline_type):
+@@ -100,8 +111,16 @@ class BaseBuilder:
+                 asr_class = RNNTInferenceWrapper
+             case (ASRDecodingType.SALM, PipelineType.BUFFERED):
+                 asr_class = SALMASRInferenceWrapper
+-                # remove decoding_cfg, SALM AED does not use decoding_cfg yet
++                # SALM does not use decoding_cfg yet
++                model_params.pop("decoding_cfg")
++            case (ASRDecodingType.AED, PipelineType.BUFFERED):
++                asr_class = AEDInferenceWrapper
+                 model_params.pop("decoding_cfg")
++                # Inject optional AED prompt defaults from cfg if present
++                for key in ("source_lang", "target_lang", "task", "pnc"):
++                    val = asr_cfg.get(key)
++                    if val is not None:
++                        model_params[key] = val
+             case (ASRDecodingType.CTC, PipelineType.CACHE_AWARE):
+                 asr_class = CacheAwareCTCInferenceWrapper
+             case (ASRDecodingType.RNNT, PipelineType.CACHE_AWARE):
+@@ -112,7 +131,7 @@ class BaseBuilder:
+                 )
+ 
+         asr_model = asr_class(**model_params)
+-        logging.info(f"ASR model `{cfg.asr.model_name}` loaded")
++        logging.info(f"ASR model `{model_name}` loaded")
+         return asr_model
+ 
+     @classmethod
+diff --git a/nemo/collections/asr/inference/factory/buffered_pipeline_builder.py b/nemo/collections/asr/inference/factory/buffered_pipeline_builder.py
+index 17815e578c..ccd66d758d 100644
+--- a/nemo/collections/asr/inference/factory/buffered_pipeline_builder.py
++++ b/nemo/collections/asr/inference/factory/buffered_pipeline_builder.py
+@@ -15,6 +15,7 @@
+ from omegaconf import DictConfig, OmegaConf
+ 
+ from nemo.collections.asr.inference.factory.base_builder import BaseBuilder
++from nemo.collections.asr.inference.pipelines.buffered_aed_pipeline import BufferedAEDPipeline
+ from nemo.collections.asr.inference.pipelines.buffered_ctc_pipeline import BufferedCTCPipeline
+ from nemo.collections.asr.inference.pipelines.buffered_rnnt_pipeline import BufferedRNNTPipeline
+ from nemo.collections.asr.inference.pipelines.buffered_salm_pipeline import BufferedSALMPipeline
+@@ -33,13 +34,13 @@ class BufferedPipelineBuilder(BaseBuilder):
+     """
+ 
+     @classmethod
+-    def build(cls, cfg: DictConfig) -> BufferedRNNTPipeline | BufferedCTCPipeline | BufferedSALMPipeline:
++    def build(cls, cfg: DictConfig) -> BufferedRNNTPipeline | BufferedCTCPipeline | BufferedSALMPipeline | BufferedAEDPipeline:
+         """
+         Build the buffered streaming pipeline based on the config.
+         Args:
+             cfg: (DictConfig) Config
+         Returns:
+-            Returns BufferedRNNTPipeline, BufferedCTCPipeline, or BufferedSALMPipeline object
++            Returns BufferedRNNTPipeline, BufferedCTCPipeline, BufferedSALMPipeline, or BufferedAEDPipeline object
+         """
+         asr_decoding_type = ASRDecodingType.from_str(cfg.asr_decoding_type)
+ 
+@@ -49,8 +50,10 @@ class BufferedPipelineBuilder(BaseBuilder):
+             return cls.build_buffered_ctc_pipeline(cfg)
+         elif asr_decoding_type is ASRDecodingType.SALM:
+             return cls.build_buffered_salm_pipeline(cfg)
++        elif asr_decoding_type is ASRDecodingType.AED:
++            return cls.build_buffered_aed_pipeline(cfg)
+ 
+-        raise ValueError("Invalid asr decoding type for buffered streaming. Need to be one of ['CTC', 'RNNT', 'SALM']")
++        raise ValueError("Invalid asr decoding type for buffered streaming. Need to be one of ['CTC', 'RNNT', 'SALM', 'AED']")
+ 
+     @classmethod
+     def get_rnnt_decoding_cfg(cls, cfg: DictConfig) -> RNNTDecodingConfig:
+@@ -123,6 +126,25 @@ class BufferedPipelineBuilder(BaseBuilder):
+         logging.info(f"`{type(ctc_pipeline).__name__}` pipeline loaded")
+         return ctc_pipeline
+ 
++    @classmethod
++    def build_buffered_aed_pipeline(cls, cfg: DictConfig) -> BufferedAEDPipeline:
++        """
++        Build the buffered AED (Canary) pipeline based on the config.
++        Args:
++            cfg: (DictConfig) Config
++        Returns:
++            Returns BufferedAEDPipeline object
++        """
++        asr_model = cls._build_asr(cfg, decoding_cfg=None)
++
++        itn_model = cls._build_itn(cfg, input_is_lower_cased=True)
++
++        nmt_model = cls._build_nmt(cfg)
++
++        aed_pipeline = BufferedAEDPipeline(cfg, asr_model, itn_model, nmt_model)
++        logging.info(f"`{type(aed_pipeline).__name__}` pipeline loaded")
++        return aed_pipeline
++
+     @classmethod
+     def build_buffered_salm_pipeline(cls, cfg: DictConfig) -> BufferedSALMPipeline:
+         """
+diff --git a/nemo/collections/asr/inference/streaming/buffering/incremental_audio_bufferer.py b/nemo/collections/asr/inference/streaming/buffering/incremental_audio_bufferer.py
+index 19f6e1b88b..698881980a 100644
+--- a/nemo/collections/asr/inference/streaming/buffering/incremental_audio_bufferer.py
++++ b/nemo/collections/asr/inference/streaming/buffering/incremental_audio_bufferer.py
+@@ -56,6 +56,18 @@ class IncrementalAudioBufferer:
+             raise ValueError(f"Overlap size ({self.overlap_size}) must be divisible by chunk size ({self.chunk_size})")
+ 
+         self.drop_size = self.buffer_size - self.overlap_size
++
++        # drop_size must be >= chunk_size so the buffer can advance by at least one chunk
++        # when full. If drop_size == 0 (overlap == buffer), head gets stuck at buffer end
++        # and subsequent copy_ calls go out of bounds.
++        if self.drop_size < self.chunk_size:
++            raise ValueError(
++                f"buffer_size - overlap_size ({self.buffer_size} - {self.overlap_size} = {self.drop_size}) "
++                f"must be >= chunk_size ({self.chunk_size}). "
++                f"In seconds: buffer_size ({buffer_size_in_secs}s) - overlap_size ({overlap_size_in_secs}s) "
++                f">= chunk_size ({chunk_size_in_secs}s) must hold."
++            )
++
+         self.sample_buffer = torch.zeros(self.buffer_size, dtype=torch.float32)
+         self.remaining_capacity = self.buffer_size
+         self.head = 0
+diff --git a/nemo/collections/asr/inference/utils/enums.py b/nemo/collections/asr/inference/utils/enums.py
+index 87c1092dc9..59b34ace35 100644
+--- a/nemo/collections/asr/inference/utils/enums.py
++++ b/nemo/collections/asr/inference/utils/enums.py
+@@ -37,6 +37,7 @@ class ASRDecodingType(StrEnumMixin, Enum):
+     CTC = auto()
+     RNNT = auto()
+     SALM = auto()
++    AED = auto()
+ 
+ 
+ class ASROutputGranularity(StrEnumMixin, Enum):
+diff --git a/nemo/collections/asr/metrics/wer.py b/nemo/collections/asr/metrics/wer.py
+index 719af4adcd..5a6766b73c 100644
+--- a/nemo/collections/asr/metrics/wer.py
++++ b/nemo/collections/asr/metrics/wer.py
+@@ -340,11 +340,15 @@ class WER(Metric):
+         for h, r in zip(hypotheses, references):
+             if isinstance(h, list):
+                 h = h[0]
++            # Lowercase before edit distance: English becomes case-insensitive;
++            # Indic scripts (Devanagari, Bengali, Tamil, Perso-Arabic, etc.) are caseless so .lower() is a no-op.
++            h_text = h.text.lower()
++            r = r.lower()
+             if self.use_cer:
+-                h_list = list(h.text)
++                h_list = list(h_text)
+                 r_list = list(r)
+             else:
+-                h_list = h.text.split()
++                h_list = h_text.split()
+                 r_list = r.split()
+             words += len(r_list)
+             # Compute Levenstein's distance
+diff --git a/nemo/collections/asr/models/aed_multitask_models.py b/nemo/collections/asr/models/aed_multitask_models.py
+index b5101db138..395313a033 100644
+--- a/nemo/collections/asr/models/aed_multitask_models.py
++++ b/nemo/collections/asr/models/aed_multitask_models.py
+@@ -630,6 +630,22 @@ class EncDecMultiTaskModel(ASRModel, ExportableEncDecModel, ASRBPEMixin, ASRModu
+             # Adding this to support processing audio files of arbitrary length by chunking them into hour-long segments.
+             config.cut_into_windows_duration = 3600
+             config.cut_into_windows_hop = 3600
++        # Cap per-cut prompted-transcript length so we never overflow the decoder's
++        # positional embedding. Lhotse's built-in TokenCountFilter is a no-op on Cuts,
++        # so we filter inside PromptedAudioToTextLhotseDataset.__getitem__ instead.
++        # We read from cfg because setup_training_data runs before transf_decoder is built.
++        # This only matters for teacher-forced training/validation, where the answer
++        # tokens are fed to the decoder. During inference/transcription the decoder is
++        # autoregressive and consumes only the prompt (see predict_step), so the cap
++        # would wrongly drop long-reference cuts -- disable it when do_transcribe is set.
++        dec_max = 0
++        try:
++            dec_max = int(self.cfg.transf_decoder.config_dict.max_sequence_length)
++        except Exception:
++            pass
++        max_token_len = (dec_max - 14) if dec_max > 0 else None
++        if config.get("do_transcribe", False):
++            max_token_len = None
+         return get_lhotse_dataloader_from_config(
+             config,
+             global_rank=global_rank,
+@@ -638,6 +654,7 @@ class EncDecMultiTaskModel(ASRModel, ExportableEncDecModel, ASRBPEMixin, ASRModu
+                 tokenizer=self.tokenizer,
+                 prompt=self.prompt,
+                 enable_chunking=enable_chunking,  # <-- enables chunking
++                max_token_len=max_token_len,
+             ),
+             tokenizer=self.tokenizer,
+         )
+@@ -807,22 +824,142 @@ class EncDecMultiTaskModel(ASRModel, ExportableEncDecModel, ASRBPEMixin, ASRModu
+         tot_frames = torch.as_tensor(batch.audio.numel(), device=num_frames.device, dtype=torch.float)
+         tot_tokens = torch.as_tensor(batch.prompted_transcript.numel(), device=num_frames.device, dtype=torch.float)
+ 
+-        transf_log_probs, encoded_len, enc_states, enc_mask = self.forward(
+-            input_signal=batch.audio,
+-            input_signal_length=batch.audio_lens,
+-            transcript=input_ids,
+-            transcript_length=input_ids_lens,
+-        )
++        # Pre-copy the small int tensors and cut ids to CPU BEFORE forward.
++        # If forward triggers a CUDA device-side assert, the GPU context becomes
++        # poisoned and any subsequent .to("cpu") will also raise — so we must
++        # snapshot now, on the happy path, to have something to log on failure.
++        _diag_input_ids_cpu = input_ids.detach().to("cpu", non_blocking=False)
++        _diag_labels_cpu = labels.detach().to("cpu", non_blocking=False)
++        _diag_input_ids_lens_cpu = input_ids_lens.detach().to("cpu", non_blocking=False)
++        _diag_prompted_lens_cpu = batch.prompted_transcript_lens.detach().to("cpu", non_blocking=False)
++        _diag_cut_ids = []
++        if getattr(batch, "cuts", None) is not None:
++            try:
++                _diag_cut_ids = [c.id for c in batch.cuts]
++            except Exception:
++                _diag_cut_ids = []
++
++        # OOM recovery that KEEPS DDP IN SYNC.
++        #
++        # A single rank that silently swaps in a different code path (return None,
++        # or a zero-loss with a different log dict / skipped metric.eval) is NOT
++        # DDP-safe: collectives must match across ALL ranks step-for-step. If only
++        # the OOM rank diverges, the healthy ranks block at the next collective
++        # (gradient all-reduce, logged-metric sync, etc.) waiting for a call this
++        # rank never makes, until the NCCL watchdog (default 30 min) tears the job
++        # down. To stay collective-consistent we (1) catch OOM locally and set a
++        # flag, (2) all-reduce that flag so EVERY rank learns if ANY rank OOM'd,
++        # and (3) if so, ALL ranks return the IDENTICAL zero-loss path — same
++        # backward graph, same log keys, same collectives — so the batch is
++        # effectively dropped on every rank without hanging the cluster.
++        import sys
++        import gc
++        import torch.distributed as _dist
++
++        _oom = False
++        try:
++            transf_log_probs, encoded_len, enc_states, enc_mask = self.forward(
++                input_signal=batch.audio,
++                input_signal_length=batch.audio_lens,
++                transcript=input_ids,
++                transcript_length=input_ids_lens,
++            )
+ 
+-        # Mask components: 1) discard padding  &  2) discard prompt (notice the negation)
+-        # For a full decoder sequence O with len M, the loss mask skips the first element,
+-        # covering the remaining M-1 elements - hence we subtract 1 from prompt lens to account BOS.
+-        if self.cfg.get("use_loss_mask_for_prompt", False):
+-            maxlen = batch.prompted_transcript.shape[1] - 1
+-            loss_mask = lens_to_mask(input_ids_lens, maxlen) & ~lens_to_mask(batch.prompt_lens - 1, maxlen)
++            # Mask components: 1) discard padding  &  2) discard prompt (notice the negation)
++            # For a full decoder sequence O with len M, the loss mask skips the first element,
++            # covering the remaining M-1 elements - hence we subtract 1 from prompt lens to account BOS.
++            if self.cfg.get("use_loss_mask_for_prompt", False):
++                maxlen = batch.prompted_transcript.shape[1] - 1
++                loss_mask = lens_to_mask(input_ids_lens, maxlen) & ~lens_to_mask(batch.prompt_lens - 1, maxlen)
++            else:
++                loss_mask = None
++            transf_loss = self.loss(log_probs=transf_log_probs, labels=labels, output_mask=loss_mask)
++        except torch.cuda.OutOfMemoryError as _oom_exc:
++            _oom = True
++            # Drop the exception traceback so it doesn't pin partial-forward activations.
++            _oom_exc = None
++            gc.collect()
++            torch.cuda.empty_cache()
++
++            rank = _dist.get_rank() if _dist.is_available() and _dist.is_initialized() else 0
++            try:
++                bsz = tuple(_diag_input_ids_cpu.shape)
++                len_max = int(_diag_input_ids_lens_cpu.max())
++            except Exception:
++                bsz, len_max = "?", "?"
++            print(
++                f"[AED-OOM rank={rank} step={batch_nb}] CUDA OOM in forward/loss — SKIPPING this "
++                f"batch on ALL ranks (synchronized zero-loss). batch_shape={bsz} max_len={len_max} "
++                f"num_cuts={len(_diag_cut_ids)}\n"
++                f"  skipped_cut_ids={_diag_cut_ids}",
++                file=sys.stderr,
++                flush=True,
++            )
++        except Exception as _diag_exc:
++            import sys
++            import torch.distributed as _dist
++
++            rank = _dist.get_rank() if _dist.is_available() and _dist.is_initialized() else 0
++            try:
++                dec_vocab = int(getattr(self.transf_decoder, "vocab_size", -1))
++                dec_max_pos = int(getattr(self.transf_decoder, "max_sequence_length", -1))
++                ids_min, ids_max = int(_diag_input_ids_cpu.min()), int(_diag_input_ids_cpu.max())
++                lbl_min, lbl_max = int(_diag_labels_cpu.min()), int(_diag_labels_cpu.max())
++                len_max = int(_diag_input_ids_lens_cpu.max())
++                prompted_len_max = int(_diag_prompted_lens_cpu.max())
++                oob_rows = (
++                    ((_diag_input_ids_cpu >= dec_vocab) | (_diag_input_ids_cpu < 0))
++                    .any(dim=-1)
++                    .nonzero(as_tuple=False)
++                    .flatten()
++                    .tolist()
++                )
++                len_oob_rows = (_diag_input_ids_lens_cpu >= dec_max_pos).nonzero(as_tuple=False).flatten().tolist()
++                print(
++                    f"[AED-DIAG rank={rank} step={batch_nb}] training_step crashed: {type(_diag_exc).__name__}: {_diag_exc}\n"
++                    f"  decoder.vocab_size={dec_vocab}  decoder.max_sequence_length={dec_max_pos}\n"
++                    f"  input_ids: shape={tuple(_diag_input_ids_cpu.shape)} min={ids_min} max={ids_max}\n"
++                    f"  labels:    shape={tuple(_diag_labels_cpu.shape)} min={lbl_min} max={lbl_max}\n"
++                    f"  input_ids_lens.max={len_max}  prompted_transcript_lens.max={prompted_len_max}\n"
++                    f"  oob_row_indices(vs vocab)={oob_rows}\n"
++                    f"  oob_row_indices(len >= max_pos)={len_oob_rows}\n"
++                    f"  oob_cut_ids(vocab)={[_diag_cut_ids[i] for i in oob_rows if i < len(_diag_cut_ids)]}\n"
++                    f"  oob_cut_ids(len)={[_diag_cut_ids[i] for i in len_oob_rows if i < len(_diag_cut_ids)]}\n"
++                    f"  all_cut_ids={_diag_cut_ids}",
++                    file=sys.stderr,
++                    flush=True,
++                )
++            except Exception as _log_exc:
++                print(f"[AED-DIAG rank={rank}] diagnostic logging itself failed: {_log_exc}", file=sys.stderr, flush=True)
++            raise
++
++        # ---- Synchronized OOM barrier --------------------------------------
++        # Every rank UNCONDITIONALLY runs this 1-element all-reduce each step, so
++        # it is itself a collective that always matches across ranks. It tells
++        # every rank whether ANY rank hit OOM above. If so, all ranks bail out
++        # via the SAME zero-loss path below — identical backward graph, identical
++        # log keys — keeping every downstream collective in lockstep.
++        _device = next(self.parameters()).device
++        if _dist.is_available() and _dist.is_initialized():
++            _oom_flag = torch.tensor([1.0 if _oom else 0.0], device=_device)
++            _dist.all_reduce(_oom_flag, op=_dist.ReduceOp.SUM)
++            _any_oom = bool(_oom_flag.item() > 0.0)
+         else:
+-            loss_mask = None
+-        transf_loss = self.loss(log_probs=transf_log_probs, labels=labels, output_mask=loss_mask)
++            _any_oom = _oom
++
++        if _any_oom:
++            # Drop this step's forward activations on the healthy ranks too, then
++            # have EVERY rank return a zero loss connected to all params. Backward
++            # yields zero grads everywhere -> the gradient all-reduce fires in
++            # lockstep and the optimizer step is a no-op (batch dropped on all).
++            transf_log_probs = encoded_len = enc_states = enc_mask = transf_loss = None
++            gc.collect()
++            torch.cuda.empty_cache()
++            zero_loss = sum(p.sum() for p in self.parameters() if p.requires_grad) * 0.0
++            return {
++                "loss": zero_loss,
++                "log": {"train_loss": zero_loss, "oom_skipped": torch.as_tensor(1.0)},
++            }
+ 
+         # Train step evaluation. From other asr models.
+         if hasattr(self, '_trainer') and self._trainer is not None:
+diff --git a/nemo/collections/asr/models/hybrid_rnnt_ctc_bpe_models_prompt.py b/nemo/collections/asr/models/hybrid_rnnt_ctc_bpe_models_prompt.py
+index 992de84fc7..428cd3cc74 100644
+--- a/nemo/collections/asr/models/hybrid_rnnt_ctc_bpe_models_prompt.py
++++ b/nemo/collections/asr/models/hybrid_rnnt_ctc_bpe_models_prompt.py
+@@ -193,6 +193,13 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+         # setting the RNNT decoder as the default one
+         self.cur_decoder = "rnnt"
+ 
++        # Exclude lang-tag tokens from ids_to_text so WER measures transcript
++        # accuracy only; lang prediction accuracy is tracked separately.
++        from nemo.collections.common.tokenizers.aggregate_tokenizer import AggregateTokenizer
++        if isinstance(self.tokenizer, AggregateTokenizer) and 'lang' in self.tokenizer.tokenizers_dict:
++            self.tokenizer._skip_langs_in_text = {'lang'}
++            logging.info("[prompt] _skip_langs_in_text={'lang'}: lang-tag tokens excluded from WER text.")
++
+     def _setup_dataloader_from_config(self, config: Optional[Dict]):
+         if config.get("use_lhotse"):
+             if config.get('initialize_prompt_feature', True):
+@@ -203,8 +210,8 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+                 logging.info("Setting up Lhotse dataset without prompt support")
+             return get_lhotse_dataloader_from_config(
+                 config,
+-                global_rank=self.global_rank,
+-                world_size=self.world_size,
++                global_rank=config.get('global_rank', self.global_rank),
++                world_size=config.get('world_size', self.world_size),
+                 dataset=dataset,
+                 tokenizer=self.tokenizer,
+             )
+@@ -602,7 +609,7 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+         if self.is_interctc_enabled():
+             AccessMixin.set_access_enabled(access_enabled=True)
+ 
+-        signal, signal_len, transcript, transcript_len, prompt = batch
++        signal, signal_len, transcript, transcript_len, prompt = batch[:5]
+ 
+         # forward() only performs encoder forward
+         if isinstance(batch, DALIOutputs) and batch.has_processed_signal:
+@@ -694,6 +701,23 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+                 self.ctc_wer.reset()
+                 tensorboard_logs.update({'training_batch_wer_ctc': ctc_wer})
+ 
++        # Log predicted language tag for the first sample in the batch.
++        # Runs a lightweight single-sample RNNT decode so the predicted lang tag
++        # is clearly visible in the console independently from the WER text line.
++        if compute_wer and self.trainer.is_global_zero:
++            with torch.no_grad():
++                _sample_hyps = self.decoding.rnnt_decoder_predictions_tensor(
++                    encoder_output=encoded[:1].detach(),
++                    encoded_lengths=encoded_len[:1].detach(),
++                    return_hypotheses=True,
++                )
++            if _sample_hyps and hasattr(_sample_hyps[0], 'y_sequence'):
++                _pred_lang, _pred_text = self._split_hyp_lang_text(_sample_hyps[0].y_sequence)
++                logging.info(
++                    f"[train step {self.trainer.global_step}] "
++                    f"pred_lang='{_pred_lang}' | pred_text='{_pred_text[:120]}'"
++                )
++
+         # note that we want to apply interctc independent of whether main ctc
+         # loss is used or not (to allow rnnt + interctc training).
+         # assuming ``ctc_loss_weight=0.3`` and interctc is applied to a single
+@@ -714,7 +738,11 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+         return {'loss': loss_value}
+ 
+     def predict_step(self, batch, batch_idx, dataloader_idx=0):
+-        signal, signal_len, transcript, transcript_len, prompt = batch
++        if len(batch) == 6:
++            signal, signal_len, transcript, transcript_len, prompt, cuts = batch
++        else:
++            cuts = None
++            signal, signal_len, transcript, transcript_len, prompt = batch
+ 
+         # forward() only performs encoder forward
+         if isinstance(batch, DALIOutputs) and batch.has_processed_signal:
+@@ -735,16 +763,18 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+                 return_hypotheses=False,
+             )
+ 
++        if cuts is not None:
++            return list(zip(cuts, best_hyp))
++
+         batch_size = signal_len.shape[0]
+         sample_id = torch.arange(batch_idx * batch_size, (batch_idx + 1) * batch_size).cpu().detach().numpy()
+-
+         return list(zip(sample_id, best_hyp))
+ 
+     def validation_pass(self, batch, batch_idx, dataloader_idx):
+         if self.is_interctc_enabled():
+             AccessMixin.set_access_enabled(access_enabled=True)
+ 
+-        signal, signal_len, transcript, transcript_len, prompt = batch
++        signal, signal_len, transcript, transcript_len, prompt = batch[:5]
+ 
+         # forward() only performs encoder forward
+         if isinstance(batch, DALIOutputs) and batch.has_processed_signal:
+@@ -829,21 +859,60 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+         tensorboard_logs['val_wer_denom_ctc'] = ctc_wer_denom
+         tensorboard_logs['val_wer_ctc'] = ctc_wer
+ 
+-        # BLEU score calculation
+-        self.bleu.update(
+-            predictions=encoded, predictions_lengths=encoded_len, targets=transcript, targets_lengths=transcript_len
+-        )
+-        bleu_metrics = self.bleu.compute(return_all_metrics=True, prefix="val_")
+-        tensorboard_logs.update(
+-            {
+-                'val_bleu_num': bleu_metrics['val_bleu_num'],
+-                'val_bleu_denom': bleu_metrics['val_bleu_denom'],
+-                'val_bleu_pred_len': bleu_metrics['val_bleu_pred_len'],
+-                'val_bleu_target_len': bleu_metrics['val_bleu_target_len'],
+-                'val_bleu': bleu_metrics['val_bleu'],
+-            }
+-        )
+-        self.bleu.reset()
++        # Language-tag accuracy — decode the batch with RNNT and check whether the
++        # model predicts the correct language tag token for each sample.
++        from nemo.collections.common.tokenizers.aggregate_tokenizer import AggregateTokenizer
++        if isinstance(self.tokenizer, AggregateTokenizer) and 'lang' in self.tokenizer.tokenizers_dict:
++            with torch.no_grad():
++                _lang_hyps = self.decoding.rnnt_decoder_predictions_tensor(
++                    encoder_output=encoded, encoded_lengths=encoded_len, return_hypotheses=True
++                )
++            _tgts_cpu = transcript.long().cpu()
++            _tgt_lens_cpu = transcript_len.long().cpu()
++            _lang_correct = 0
++            _lang_total = 0
++            for _i, _hyp in enumerate(_lang_hyps):
++                # Reference: first lang-token in target sequence
++                _ref_ids = _tgts_cpu[_i, :_tgt_lens_cpu[_i].item()].tolist()
++                _ref_lang = ""
++                for _tid in _ref_ids:
++                    if self.tokenizer.langs_by_token_id.get(_tid) == 'lang':
++                        _ref_lang = self.tokenizer.ids_to_text_and_langs([_tid])[0]['char'].strip('<>').strip()
++                        break
++                if not _ref_lang:
++                    continue
++                _pred_lang, _pred_text = self._split_hyp_lang_text(
++                    _hyp.y_sequence if hasattr(_hyp, 'y_sequence') else []
++                )
++                _lang_total += 1
++                if _pred_lang == _ref_lang:
++                    _lang_correct += 1
++                # Log first sample of first batch for quick visual inspection
++                if _i == 0 and batch_idx == 0:
++                    logging.info(
++                        f"[val] ref_lang='{_ref_lang}' pred_lang='{_pred_lang}' | "
++                        f"pred_text='{_pred_text[:120]}'"
++                    )
++            _dev = encoded.device
++            tensorboard_logs['val_lang_acc_num'] = torch.tensor(float(_lang_correct), device=_dev)
++            tensorboard_logs['val_lang_acc_denom'] = torch.tensor(float(_lang_total), device=_dev)
++
++        # BLEU score calculation (skipped when use_bleu: false in config)
++        if self.cfg.get('use_bleu', True):
++            self.bleu.update(
++                predictions=encoded, predictions_lengths=encoded_len, targets=transcript, targets_lengths=transcript_len
++            )
++            bleu_metrics = self.bleu.compute(return_all_metrics=True, prefix="val_")
++            tensorboard_logs.update(
++                {
++                    'val_bleu_num': bleu_metrics['val_bleu_num'],
++                    'val_bleu_denom': bleu_metrics['val_bleu_denom'],
++                    'val_bleu_pred_len': bleu_metrics['val_bleu_pred_len'],
++                    'val_bleu_target_len': bleu_metrics['val_bleu_target_len'],
++                    'val_bleu': bleu_metrics['val_bleu'],
++                }
++            )
++            self.bleu.reset()
+ 
+         self.log('global_step', torch.tensor(self.trainer.global_step, dtype=torch.float32))
+ 
+@@ -906,14 +975,21 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+             ctc_wer_denom = torch.stack([x['val_wer_denom_ctc'] for x in outputs]).sum()
+             tensorboard_logs['val_wer_ctc'] = ctc_wer_num.float() / ctc_wer_denom
+ 
+-        # Calculate BLEU score
+-        bleu_num = torch.stack([x['val_bleu_num'] for x in outputs]).sum(dim=0)
+-        bleu_denom = torch.stack([x['val_bleu_denom'] for x in outputs]).sum(dim=0)
+-        bleu_pred_len = torch.stack([x['val_bleu_pred_len'] for x in outputs]).sum(dim=0)
+-        bleu_target_len = torch.stack([x['val_bleu_target_len'] for x in outputs]).sum(dim=0)
++        # Aggregate language-tag accuracy across batches
++        if outputs and 'val_lang_acc_num' in outputs[0]:
++            _lang_num = torch.stack([x['val_lang_acc_num'] for x in outputs]).sum()
++            _lang_denom = torch.stack([x['val_lang_acc_denom'] for x in outputs]).sum()
++            tensorboard_logs['val_lang_acc'] = _lang_num / _lang_denom.clamp(min=1)
+ 
+-        val_bleu = self.bleu._compute_bleu(bleu_pred_len, bleu_target_len, bleu_num, bleu_denom)
+-        tensorboard_logs['val_bleu'] = val_bleu
++        # Calculate BLEU score (skipped when use_bleu: false in config)
++        if self.cfg.get('use_bleu', True):
++            bleu_num = torch.stack([x['val_bleu_num'] for x in outputs]).sum(dim=0)
++            bleu_denom = torch.stack([x['val_bleu_denom'] for x in outputs]).sum(dim=0)
++            bleu_pred_len = torch.stack([x['val_bleu_pred_len'] for x in outputs]).sum(dim=0)
++            bleu_target_len = torch.stack([x['val_bleu_target_len'] for x in outputs]).sum(dim=0)
++
++            val_bleu = self.bleu._compute_bleu(bleu_pred_len, bleu_target_len, bleu_num, bleu_denom)
++            tensorboard_logs['val_bleu'] = val_bleu
+ 
+         # Finalize and log metrics
+         metrics = {**val_loss_log, 'log': tensorboard_logs}
+@@ -929,6 +1005,185 @@ class EncDecHybridRNNTCTCBPEModelWithPrompt(EncDecHybridRNNTCTCBPEModel, ASRTran
+     def bleu(self, bleu):
+         self._bleu = bleu
+ 
++    def set_streaming_target_lang(self, target_lang: str):
++        """Set a single language for all samples during cache-aware streaming."""
++        prompt_dict = self.cfg.model_defaults.get('prompt_dictionary')
++        if not prompt_dict:
++            raise ValueError("Prompt dictionary is empty.")
++        if target_lang not in prompt_dict:
++            available = list(prompt_dict.keys())
++            raise ValueError(f"Unknown target language: '{target_lang}'. Available: {available[:10]}")
++        self._streaming_target_lang = target_lang
++        self._streaming_langs = None
++        logging.info(f"Streaming target language set to: {target_lang}")
++
++    def set_streaming_langs(self, langs: list):
++        """Set per-sample languages for the current batch during cache-aware streaming."""
++        prompt_dict = self.cfg.model_defaults.get('prompt_dictionary', {})
++        fallback = next(iter(prompt_dict), None) if prompt_dict else None
++        resolved = []
++        for lang in langs:
++            if lang is None or lang not in prompt_dict:
++                if lang is not None:
++                    logging.warning(f"Language '{lang}' not in prompt_dictionary, falling back to '{fallback}'.")
++                resolved.append(fallback)
++            else:
++                resolved.append(lang)
++        self._streaming_langs = resolved
++
++    def _split_hyp_lang_text(self, y_sequence):
++        """Split an RNNT hypothesis y_sequence into (pred_lang_str, pred_text_str).
++
++        Tokens whose sub-tokenizer key is 'lang' are decoded as the language tag;
++        all other tokens form the transcript.  Returns ("", full_text) when the
++        tokenizer is not an AggregateTokenizer or has no 'lang' sub-tokenizer.
++        """
++        from nemo.collections.common.tokenizers.aggregate_tokenizer import AggregateTokenizer
++        if not isinstance(self.tokenizer, AggregateTokenizer) or 'lang' not in self.tokenizer.tokenizers_dict:
++            return "", self.decoding.decode_ids_to_str(list(y_sequence) if not isinstance(y_sequence, list) else y_sequence)
++        if isinstance(y_sequence, torch.Tensor):
++            ids = y_sequence.tolist()
++        else:
++            ids = list(y_sequence)
++        # Filter blank tokens (blank_as_pad mode can surface them in y_sequence).
++        blank_id = self.tokenizer.vocab_size
++        ids = [i for i in ids if i != blank_id]
++        lang_ids, text_ids = [], []
++        for tid in ids:
++            if self.tokenizer.langs_by_token_id.get(tid) == 'lang':
++                lang_ids.append(tid)
++            else:
++                text_ids.append(tid)
++        if lang_ids:
++            tok_info = self.tokenizer.ids_to_text_and_langs(lang_ids)
++            pred_lang = ''.join(t['char'] for t in tok_info).strip().strip('<>').strip()
++        else:
++            pred_lang = ""
++        pred_text = self.tokenizer.ids_to_text(text_ids).strip()
++        return pred_lang, pred_text
++
++    def conformer_stream_step(
++        self,
++        processed_signal,
++        processed_signal_length=None,
++        cache_last_channel=None,
++        cache_last_time=None,
++        cache_last_channel_len=None,
++        keep_all_outputs=True,
++        previous_hypotheses=None,
++        previous_pred_out=None,
++        drop_extra_pre_encoded=None,
++        return_transcription=True,
++        return_log_probs=False,
++        bypass_pre_encode=False,
++    ):
++        """Override to apply prompt conditioning after encoder streaming step."""
++        (
++            encoded,
++            encoded_len,
++            cache_last_channel_next,
++            cache_last_time_next,
++            cache_last_channel_next_len,
++        ) = self.encoder.cache_aware_stream_step(
++            processed_signal=processed_signal,
++            processed_signal_length=processed_signal_length,
++            cache_last_channel=cache_last_channel,
++            cache_last_time=cache_last_time,
++            cache_last_channel_len=cache_last_channel_len,
++            keep_all_outputs=keep_all_outputs,
++            drop_extra_pre_encoded=drop_extra_pre_encoded,
++            bypass_pre_encode=bypass_pre_encode,
++        )
++
++        if self.concat:
++            num_prompts = self.cfg.get('num_prompts', 128)
++            prompt_dict = self.cfg.model_defaults.get('prompt_dictionary', {})
++            batch_size = encoded.shape[0]
++            time_steps = encoded.shape[2]
++            encoded_t = encoded.transpose(1, 2)  # (B, T, D)
++
++            prompt = torch.zeros(
++                batch_size, time_steps, num_prompts, dtype=encoded_t.dtype, device=encoded_t.device
++            )
++
++            streaming_langs = getattr(self, '_streaming_langs', None)
++            if streaming_langs is not None:
++                # Per-sample language prompts
++                for i, lang in enumerate(streaming_langs[:batch_size]):
++                    prompt_id = prompt_dict.get(lang, 0)
++                    prompt[i, :, prompt_id] = 1.0
++            else:
++                # Single language for whole batch
++                target_lang = getattr(self, '_streaming_target_lang', None)
++                if target_lang is None:
++                    target_lang = next(iter(prompt_dict), None)
++                    logging.warning(
++                        f"No streaming language set. Falling back to '{target_lang}'. "
++                        "Call set_streaming_langs() or set_streaming_target_lang() before streaming."
++                    )
++                prompt_id = prompt_dict.get(target_lang, 0)
++                prompt[:, :, prompt_id] = 1.0
++
++            out_dtype = encoded_t.dtype
++            concat_enc = torch.cat([encoded_t, prompt], dim=-1)  # (B, T, D+num_prompts)
++            encoded_t = self.prompt_kernel(concat_enc).to(out_dtype)  # (B, T, D)
++            encoded = encoded_t.transpose(1, 2)  # (B, D, T)
++
++        # Decoding — mirrors the base conformer_stream_step logic
++        if self.cur_decoder == "ctc":
++            if hasattr(self, "ctc_decoder"):
++                decoding = self.ctc_decoding
++                decoder = self.ctc_decoder
++            else:
++                decoding = self.decoding
++                decoder = self.decoder
++
++            log_probs = decoder(encoder_output=encoded)
++            predictions_tensor = log_probs.argmax(dim=-1, keepdim=False)
++
++            greedy_predictions = []
++            all_hyp_or_transcribed_texts = [] if return_transcription else None
++            for preds_idx in range(len(predictions_tensor)):
++                if encoded_len is None:
++                    preds_cur = predictions_tensor[preds_idx]
++                else:
++                    preds_cur = predictions_tensor[preds_idx, : encoded_len[preds_idx]]
++                if previous_pred_out is not None:
++                    preds_cur = torch.cat((previous_pred_out[preds_idx], preds_cur), dim=-1)
++                    encoded_len[preds_idx] += len(previous_pred_out[preds_idx])
++                greedy_predictions.append(preds_cur)
++                if return_transcription:
++                    decoded_out = decoding.ctc_decoder_predictions_tensor(
++                        decoder_outputs=preds_cur.unsqueeze(0),
++                        decoder_lengths=encoded_len[preds_idx : preds_idx + 1],
++                        return_hypotheses=False,
++                    )
++                    all_hyp_or_transcribed_texts.append(decoded_out[0])
++            best_hyp = None
++        else:
++            best_hyp = self.decoding.rnnt_decoder_predictions_tensor(
++                encoder_output=encoded,
++                encoded_lengths=encoded_len,
++                return_hypotheses=True,
++                partial_hypotheses=previous_hypotheses,
++            )
++            greedy_predictions = [hyp.y_sequence for hyp in best_hyp]
++            all_hyp_or_transcribed_texts = best_hyp
++
++        result = [
++            greedy_predictions,
++            all_hyp_or_transcribed_texts,
++            cache_last_channel_next,
++            cache_last_time_next,
++            cache_last_channel_next_len,
++            best_hyp,
++        ]
++        if return_log_probs:
++            result.append(log_probs)
++            result.append(encoded_len)
++
++        return tuple(result)
++
+     @classmethod
+     def get_transcribe_config(cls) -> HybridRNNTCTCPromptTranscribeConfig:
+         """
+diff --git a/nemo/collections/asr/parts/mixins/mixins.py b/nemo/collections/asr/parts/mixins/mixins.py
+index af973be3cc..9d39b6b423 100644
+--- a/nemo/collections/asr/parts/mixins/mixins.py
++++ b/nemo/collections/asr/parts/mixins/mixins.py
+@@ -241,6 +241,11 @@ class ASRBPEMixin(ABC):
+         else:
+             self.tokenizer = tokenizers.AggregateTokenizer(tokenizers_dict)
+ 
++        # When a dedicated 'lang' sub-tokenizer is present, its tokens are lang-tag
++        # predictions (<hi>, <bn>, …) that should be excluded from WER computation.
++        if 'lang' in tokenizers_dict:
++            self.tokenizer._skip_langs_in_text = {'lang'}
++
+     def _make_tokenizer(self, tokenizer_cfg: DictConfig, lang=None):
+ 
+         tokenizer_type = tokenizer_cfg.get('type').lower()
+diff --git a/nemo/collections/asr/parts/submodules/ctc_decoding.py b/nemo/collections/asr/parts/submodules/ctc_decoding.py
+index 9d8fcbc49f..cbf700e38f 100644
+--- a/nemo/collections/asr/parts/submodules/ctc_decoding.py
++++ b/nemo/collections/asr/parts/submodules/ctc_decoding.py
+@@ -1307,6 +1307,20 @@ class CTCBPEDecoding(AbstractCTCDecoding):
+             self.decode_tokens_to_str(hypothesis.text[0]).split(), hypothesis.token_confidence, hypothesis.text[0]
+         )
+ 
++    def decode_ids_to_str(self, tokens: List[int]) -> str:
++        """
++        Decodes a list of token ids to a string.
++
++        For AggregateTokenizer, calls ids_to_text directly so that
++        _skip_langs_in_text filtering is applied (lang-tag tokens are excluded
++        from the decoded string, consistent with the RNNT WER reference path).
++        """
++        from nemo.collections.common.tokenizers.aggregate_tokenizer import AggregateTokenizer
++
++        if isinstance(self.tokenizer, AggregateTokenizer):
++            return self.tokenizer.ids_to_text(tokens)
++        return super().decode_ids_to_str(tokens)
++
+     def decode_tokens_to_str(self, tokens: List[str]) -> str:
+         """
+         Implemented by subclass in order to decoder a token list into a string.
+@@ -1317,7 +1331,16 @@ class CTCBPEDecoding(AbstractCTCDecoding):
+         Returns:
+             A decoded string.
+         """
+-        hypothesis = self.tokenizer.tokens_to_text(tokens)
++        from nemo.collections.common.tokenizers.aggregate_tokenizer import AggregateTokenizer
++
++        if isinstance(self.tokenizer, AggregateTokenizer):
++            # AggregateTokenizer.tokens_to_text requires lang_id.
++            # For WER logging, decode_pieces is language-agnostic (SentencePiece subword joining),
++            # so any language's tokenizer gives the correct result.
++            lang_id = list(self.tokenizer.tokenizers_dict.keys())[0]
++            hypothesis = self.tokenizer.tokens_to_text(tokens, lang_id)
++        else:
++            hypothesis = self.tokenizer.tokens_to_text(tokens)
+         return hypothesis
+ 
+     def decode_ids_to_tokens(self, tokens: List[int]) -> List[str]:
+diff --git a/nemo/collections/common/data/lhotse/dataloader.py b/nemo/collections/common/data/lhotse/dataloader.py
+index 78d0b28fc8..3d58bda5c8 100644
+--- a/nemo/collections/common/data/lhotse/dataloader.py
++++ b/nemo/collections/common/data/lhotse/dataloader.py
+@@ -904,7 +904,10 @@ def tokenize(example, tokenizer):
+     if isinstance(example, Cut):
+         for s in example.supervisions:
+             if s.text is not None:
+-                s.tokens = np.asarray(tokenizer(s.text, s.language))
++                # s.language is the standard lhotse field; fall back to cut-level 'lang' tag
++                # (set via input_cfg tags: {lang: <code>}) when supervision.language is absent.
++                lang = s.language or getattr(example, "lang", None)
++                s.tokens = np.asarray(tokenizer(s.text, lang))
+     elif hasattr(example, "tokenize") and callable(example.tokenize):
+         example = example.tokenize(tokenizer)
+     else:
+diff --git a/nemo/collections/common/prompts/canary2.py b/nemo/collections/common/prompts/canary2.py
+index c6ba2e2bc8..18cb56e1f0 100644
+--- a/nemo/collections/common/prompts/canary2.py
++++ b/nemo/collections/common/prompts/canary2.py
+@@ -20,8 +20,16 @@ from lhotse.cut import Cut, MixedCut
+ from lhotse.utils import ifnone
+ 
+ from nemo.collections.common.data.prompt_fn import registered_prompt_format_fn
+-from nemo.collections.common.prompts.canary import BOOL_FALSE, BOOL_TRUE, PNC_FALSE, PNC_TRUE
++from nemo.collections.common.prompts.canary import (
++    BOOL_FALSE,
++    BOOL_TRUE,
++    PNC_FALSE,
++    PNC_TRUE,
++)
+ from nemo.collections.common.prompts.formatter import Modality, PromptFormatter
++from nemo.collections.common.tokenizers.canary_multilingual_tokenizer import (
++    CanaryMultilingualTokenizer,
++)
+ from nemo.collections.common.tokenizers.canary_tokenizer import (
+     CANARY2_BOCTX,
+     CANARY_BOS,
+@@ -45,30 +53,120 @@ DIARIZE_FALSE = BOOL_FALSE | {"nodiarize", "<|nodiarize|>"}
+ class Canary2PromptFormatter(PromptFormatter):
+     NAME = "canary2"
+     OUTPUT_ROLE = "assistant"
++    # Fallback slot values used when a slot is absent from both the per-instance
++    # ``prompt_defaults`` and the caller-supplied turn. Mirrors the optional_slots
++    # dict in the canary2 prompt-format function so inference works with model
++    # checkpoints that pre-date certain slots (e.g. ``romanized``).
++    SLOT_DEFAULTS = {
++        "user": {
++            "decodercontext": "",
++            "emotion": "<|emo:undefined|>",
++            "itn": "<|noitn|>",
++            "timestamp": "<|notimestamp|>",
++            "diarize": "<|nodiarize|>",
++            "romanized": "<|noromanized|>",
++            "pnc": "<|pnc|>",
++            # Required by AggregateTokenizer to select the correct sub-tokenizer.
++            # Values already in <|...|> form skip map_manifest_values_to_special_tokens,
++            # so this must be set explicitly here.
++            PromptFormatter.PROMPT_LANGUAGE_SLOT: CANARY_SPECIAL_TOKENIZER,
++        }
++    }
+     TEMPLATE = {
+         # User prompt.
+         # This is the main role used for training and ASR/AST inference.
+         "user": {
+-            "template": f"{CANARY2_BOCTX}|decodercontext|{CANARY_BOS}|emotion||source_lang||target_lang||pnc||itn||timestamp||diarize|",
++            "template": f"{CANARY2_BOCTX}|decodercontext|{CANARY_BOS}|emotion||source_lang||target_lang||pnc||itn||romanized||timestamp||diarize|",
+             "slots": {
+                 # Empty string or previous transcript / other context to bias predictions.
+                 "decodercontext": Modality.Text,
+                 # Emotion of the speaker - may be predicted by the model with a partial prompt.
+                 "emotion": Modality.TextLiteral(
+-                    "<|emo:undefined|>", "<|emo:neutral|>", "<|emo:angry|>", "<|emo:happy|>", "<|emo:sad|>"
++                    "<|emo:undefined|>",
++                    "<|emo:neutral|>",
++                    "<|emo:angry|>",
++                    "<|emo:happy|>",
++                    "<|emo:sad|>",
+                 ),
+                 # Audio input language - may be predicted by the model with a partial prompt.
+                 "source_lang": Modality.Text,
+                 # Transcription language - specified by the user.
+                 "target_lang": Modality.Text,
+                 # Should we predict punctuation and capitalization?
+-                "pnc": Modality.TextLiteral(*(PNC_TRUE | PNC_FALSE)),
++                "pnc": Modality.TextLiteral(
++                    "yes",
++                    "no",
++                    "true",
++                    "True",
++                    "false",
++                    "False",
++                    "1",
++                    "0",
++                    "pnc",
++                    "nopnc",
++                    "<|pnc|>",
++                    "<|nopnc|>",
++                ),
++                # Should we predict with inverse text normalization (numerals as digits, abbreviations, etc.)
++                "itn": Modality.TextLiteral(
++                    "yes",
++                    "no",
++                    "true",
++                    "True",
++                    "false",
++                    "False",
++                    "1",
++                    "0",
++                    "itn",
++                    "noitn",
++                    "<|itn|>",
++                    "<|noitn|>",
++                ),
+                 # Should we predict with inverse text normalization (numerals as digits, abbreviations, etc.)
+-                "itn": Modality.TextLiteral(*(ITN_TRUE | ITN_FALSE)),
++                "romanized": Modality.TextLiteral(
++                    "yes",
++                    "no",
++                    "true",
++                    "True",
++                    "false",
++                    "False",
++                    "1",
++                    "0",
++                    "itn",
++                    "noitn",
++                    "<|romanized|>",
++                    "<|noromanized|>",
++                ),
+                 # Should we predict timestamps?
+-                "timestamp": Modality.TextLiteral(*(TIMESTAMP_TRUE | TIMESTAMP_FALSE)),
+-                # # Should we diarize speech?
+-                "diarize": Modality.TextLiteral(*(DIARIZE_TRUE | DIARIZE_FALSE)),
++                "timestamp": Modality.TextLiteral(
++                    "yes",
++                    "no",
++                    "true",
++                    "True",
++                    "false",
++                    "False",
++                    "1",
++                    "0",
++                    "timestamp",
++                    "notimestamp",
++                    "<|timestamp|>",
++                    "<|notimestamp|>",
++                ),
++                # Should we diarize speech?
++                "diarize": Modality.TextLiteral(
++                    "yes",
++                    "no",
++                    "true",
++                    "True",
++                    "false",
++                    "False",
++                    "1",
++                    "0",
++                    "diarize",
++                    "nodiarize",
++                    "<|diarize|>",
++                    "<|nodiarize|>",
++                ),
+             },
+         },
+         # User prompt.
+@@ -100,7 +198,9 @@ class Canary2PromptFormatter(PromptFormatter):
+         },
+     }
+ 
+-    def encode_turn(self, prompt_template: str, expected_slots: dict, slot_values: dict) -> list[int]:
++    def encode_turn(
++        self, prompt_template: str, expected_slots: dict, slot_values: dict
++    ) -> list[int]:
+         # This method handles a level of indirection for Canary.
+         # It maps values provided in trcfg to the actual special tokens
+         # expected to be present in canary prompt.
+@@ -109,14 +209,18 @@ class Canary2PromptFormatter(PromptFormatter):
+         # This maps things such as '|task|: "asr"' to '|TASK|: "<|transcribe|>"'.
+         slot_values = map_manifest_values_to_special_tokens(slot_values)
+         return super().encode_turn(
+-            prompt_template=prompt_template, expected_slots=expected_slots, slot_values=slot_values
++            prompt_template=prompt_template,
++            expected_slots=expected_slots,
++            slot_values=slot_values,
+         )
+ 
+     def get_default_dialog_slots(self) -> list[dict]:
+         """
+         Returns a list of dialog turns that can be used as a skeleton to fill with actual slot values.
+-        If ``PromptFormatter`` was initialized with ``defaults`` argument, this method will return the
+-        defaults. Otherwise, every slot is pre-filled with ``None``.
++        Priority order for each slot value:
++        1. Per-instance ``prompt_defaults`` (set at model load time via cfg.prompt_defaults)
++        2. Class-level ``SLOT_DEFAULTS`` (covers optional slots like ``romanized`` for older checkpoints)
++        3. ``None`` (caller must supply the value, e.g. ``source_lang`` / ``target_lang``)
+         """
+ 
+         def _get_default_for_role(role: str) -> dict:
+@@ -126,38 +230,58 @@ class Canary2PromptFormatter(PromptFormatter):
+             return {}
+ 
+         role = "user"
++        instance_slots = _get_default_for_role(role).get("slots", {})
++        class_slots = self.SLOT_DEFAULTS.get(role, {})
++        # Include all TEMPLATE slots plus any extra meta-slots in SLOT_DEFAULTS
++        # (e.g. prompt_language, which is not a TEMPLATE slot but is needed by
++        # encode_turn to select the correct sub-tokenizer).
++        all_slot_keys = list(self.get_slots(role)) + [
++            k for k in class_slots if k not in self.get_slots(role)
++        ]
+         return [
+             {
+                 "role": role,
+                 "slots": {
+-                    slot: _get_default_for_role(role).get("slots", {}).get(slot) for slot in self.get_slots(role)
++                    slot: instance_slots.get(slot) or class_slots.get(slot)
++                    for slot in all_slot_keys
+                 },
+             }
+         ]
+ 
+ 
+-def map_manifest_values_to_special_tokens(slot_values: dict[str, str]) -> dict[str, str]:
++def map_manifest_values_to_special_tokens(
++    slot_values: dict[str, str],
++) -> dict[str, str]:
+     slot_values = slot_values.copy()
+ 
+     any_special_token_present = False
+ 
+     for k in ("source_lang", "target_lang"):
+-        if k in slot_values and not ((v := slot_values[k]).startswith("<|") and v.endswith("|>")):
++        if k in slot_values and not (
++            (v := slot_values[k]).startswith("<|") and v.endswith("|>")
++        ):
+             val = slot_values[k]
+             slot_values[k] = "<|" + val + "|>"
+             any_special_token_present = True
+ 
+     # Handle boolean slots
+-    for k in ("pnc", "itn", "timestamp", "diarize"):
++    for k in ("pnc", "itn", "timestamp", "diarize", "romanized"):
+         true_token = f"<|{k}|>"
+         false_token = f"<|no{k}|>"
+         if k in slot_values and slot_values[k] not in (true_token, false_token):
+-            slot_values[k] = true_token if slot_values[k] in ("yes", "1", "True", "true", k) else false_token
++            slot_values[k] = (
++                true_token
++                if slot_values[k] in ("yes", "1", "True", "true", k)
++                else false_token
++            )
+             any_special_token_present = True
+ 
+     # Auto-inject which tokenizer to look up in CanaryTokenizer if not provided,
+     # and slots for this turn correspond to user prompt.
+-    if any_special_token_present and PromptFormatter.PROMPT_LANGUAGE_SLOT not in slot_values:
++    if (
++        any_special_token_present
++        and PromptFormatter.PROMPT_LANGUAGE_SLOT not in slot_values
++    ):
+         slot_values[PromptFormatter.PROMPT_LANGUAGE_SLOT] = CANARY_SPECIAL_TOKENIZER
+ 
+     return slot_values
+@@ -192,33 +316,44 @@ def canary2(cut: Cut, prompt: Canary2PromptFormatter) -> dict[str, torch.Tensor]
+         "itn": "<|noitn|>",
+         "timestamp": "<|notimestamp|>",
+         "diarize": "<|nodiarize|>",
++        "romanized": "<|noromanized|>",
+         "pnc": "<|pnc|>",  # consistent with canary1
+     }
+-    slots = {slot: cut.custom[slot] for slot in expected_slots}
++    lang_fallback = cut.custom.get("lang", "") or ifnone(
++        cut.supervisions[0].language, ""
++    )
++    slots = {slot: (cut.custom[slot] or lang_fallback) for slot in expected_slots}
+     slots[prompt.PROMPT_LANGUAGE_SLOT] = CANARY_SPECIAL_TOKENIZER
+     for k, v in optional_slots.items():
+         slots[k] = cut.custom[k] if k in cut.custom else v
+ 
+     turns = [dict(role="user", slots=slots)]
+     # If data has no transcript, create empty response with <eos> only.
+-    text = ' '.join(s.text for s in cut.supervisions if s.text is not None)
++    text = " ".join(s.text for s in cut.supervisions if s.text is not None)
+     turns.append(
+         dict(
+             role="assistant",
+             slots={
+                 "text": text,
+-                prompt.PROMPT_LANGUAGE_SLOT: ifnone(cut.supervisions[0].language, cut.custom.get("target_lang")),
++                prompt.PROMPT_LANGUAGE_SLOT: ifnone(
++                    cut.supervisions[0].language, cut.custom.get("target_lang")
++                )
++                or lang_fallback,
+             },
+         ),
+     )
+     ans = prompt.encode_dialog(turns)
+-    if isinstance(prompt.tokenizer, CanaryTokenizer):
++    if isinstance(prompt.tokenizer, CanaryTokenizer) or isinstance(
++        prompt.tokenizer, CanaryMultilingualTokenizer
++    ):
+         eos = prompt.tokenizer.eos
+     else:  # SPE
+         eos = prompt.tokenizer.token_to_id(CANARY_EOS)
+-    assert eos > -1, "Invalid tokenizer: tokenizer.token_to_id('{CANARY_EOS}') returned {eos}"
+-    assert (
+-        ans["answer_ids"][-1].item() == eos
+-    ), f"Expected the last token in answer_ids to be EOS, but we got {ans['answer_ids']}"
++    assert eos > -1, (
++        "Invalid tokenizer: tokenizer.token_to_id('{CANARY_EOS}') returned {eos}"
++    )
++    assert ans["answer_ids"][-1].item() == eos, (
++        f"Expected the last token in answer_ids to be EOS, but we got {ans['answer_ids']}"
++    )
+     ans["answer_ids"] = ans["answer_ids"][:-1]  # Strip Canary's EOS
+     return ans
+diff --git a/nemo/collections/common/prompts/formatter.py b/nemo/collections/common/prompts/formatter.py
+index 4fb4425e6a..182e341897 100644
+--- a/nemo/collections/common/prompts/formatter.py
++++ b/nemo/collections/common/prompts/formatter.py
+@@ -59,7 +59,9 @@ class TextLiteral(BaseModalityType):
+         return isinstance(value, str) and value in self.allowed_values
+ 
+     def __repr__(self):
+-        return f"Modality.{self.__class__.__name__}(allowed_values={self.allowed_values})"
++        return (
++            f"Modality.{self.__class__.__name__}(allowed_values={self.allowed_values})"
++        )
+ 
+ 
+ class Modality:
+@@ -172,7 +174,9 @@ class PromptFormatter(ABC):
+     # Internal reserved field.
+     _REGISTERED_FORMATTERS = {}
+ 
+-    def __init__(self, tokenizer: TokenizerSpec, defaults: list[dict] | None = None) -> None:
++    def __init__(
++        self, tokenizer: TokenizerSpec, defaults: list[dict] | None = None
++    ) -> None:
+         self.tokenizer = tokenizer
+         self._defaults = defaults if defaults is not None else []
+         self._validate_defaults()
+@@ -181,24 +185,24 @@ class PromptFormatter(ABC):
+         ERR = "PromptFormatter subclass definition error:"
+         if cls.__name__ not in cls._REGISTERED_FORMATTERS:
+             for attr in ("NAME", "TEMPLATE", "OUTPUT_ROLE"):
+-                assert (
+-                    getattr(cls, attr, None) is not None
+-                ), f"{ERR} PromptFormatter subclass {cls} did not define a class attribute {attr}"
++                assert getattr(cls, attr, None) is not None, (
++                    f"{ERR} PromptFormatter subclass {cls} did not define a class attribute {attr}"
++                )
+             assert cls.NAME not in cls._REGISTERED_FORMATTERS, (
+                 f"Cannot register {cls.__name__} under {cls.NAME}: another prompt formatter of type "
+                 f"{cls._REGISTERED_FORMATTERS[cls.NAME]} has already been registered under this name."
+             )
+             cls._REGISTERED_FORMATTERS[cls.NAME] = cls
+         if "preamble" in cls.TEMPLATE:
+-            assert (
+-                len(cls.TEMPLATE["preamble"].get("slots", [])) == 0
+-            ), f"{ERR} Slots are not allowed for preamble template, but we found: '{cls.TEMPLATE['preamble']}'"
++            assert len(cls.TEMPLATE["preamble"].get("slots", [])) == 0, (
++                f"{ERR} Slots are not allowed for preamble template, but we found: '{cls.TEMPLATE['preamble']}'"
++            )
+         for role in cls.get_roles():
+             template = cls.get_template(role)
+             for slot in cls.get_slots(role):
+-                assert (
+-                    _mangled(slot) in template
+-                ), f"{ERR} Slot '{slot}' not found in template '{template}' for role '{role}'"
++                assert _mangled(slot) in template, (
++                    f"{ERR} Slot '{slot}' not found in template '{template}' for role '{role}'"
++                )
+         super().__init_subclass__(**kwargs)
+ 
+     @classmethod
+@@ -240,7 +244,8 @@ class PromptFormatter(ABC):
+             {
+                 "role": role,
+                 "slots": {
+-                    slot: _get_default_for_role(role).get("slots", {}).get(slot) for slot in self.get_slots(role)
++                    slot: _get_default_for_role(role).get("slots", {}).get(slot)
++                    for slot in self.get_slots(role)
+                 },
+             }
+             for role in self.get_roles()
+@@ -248,7 +253,10 @@ class PromptFormatter(ABC):
+         ]
+ 
+     def encode_turn(
+-        self, prompt_template: str, expected_slots: dict[str, Modality], slot_values: dict[str, Any]
++        self,
++        prompt_template: str,
++        expected_slots: dict[str, Modality],
++        slot_values: dict[str, Any],
+     ) -> list[int]:
+         prompt = prompt_template
+ 
+@@ -258,16 +266,24 @@ class PromptFormatter(ABC):
+             # but 'slot' form enables to use valid python identifiers as **kwargs
+             # for passing slots around in user functions.
+             value = slot_values.get(slot)
+-            assert value is not None, f"Missing required {slot=} in {slot_values=} for {prompt_template=}"
++            assert value is not None, (
++                f"Missing required {slot=} in {slot_values=} for {prompt_template=}"
++            )
+             prompt = prompt.replace(_mangled(slot), value)
+-        return self._apply_tokenizer(prompt, lang=slot_values.get(self.PROMPT_LANGUAGE_SLOT))
++        return self._apply_tokenizer(
++            prompt, lang=slot_values.get(self.PROMPT_LANGUAGE_SLOT)
++        )
+ 
+     def encode_dialog(self, turns: list[dict]) -> dict[str, torch.Tensor]:
+         roles = self.get_roles()
+         assert len(turns) > 0, "Empty dialog is not supported."
+         for turn in turns:
+-            assert "role" in turn, f"A turn must have have a 'role' key. We received {turn=}"
+-            assert turn["role"] in roles, f"Found turn with {turn['role']=}, but available roles are {roles}"
++            assert "role" in turn, (
++                f"A turn must have have a 'role' key. We received {turn=}"
++            )
++            assert turn["role"] in roles, (
++                f"Found turn with {turn['role']=}, but available roles are {roles}"
++            )
+ 
+         turn_tokens = []
+         turn_token_counts = []
+@@ -279,13 +295,15 @@ class PromptFormatter(ABC):
+             turn_mask_values.append(False)
+ 
+         if "preamble" in self.TEMPLATE:
+-            preamble_turns = [idx for idx, t in enumerate(turns) if t["role"] == "preamble"]
++            preamble_turns = [
++                idx for idx, t in enumerate(turns) if t["role"] == "preamble"
++            ]
+             if not preamble_turns:
+                 turns = [{"role": "preamble", **self.TEMPLATE["preamble"]}] + turns
+             else:
+-                assert (
+-                    len(preamble_turns) == 1 and preamble_turns[0] == 0
+-                ), f"Preamble can only be presented at turn 0 but we found preamble turns at indexes {preamble_turns}."
++                assert len(preamble_turns) == 1 and preamble_turns[0] == 0, (
++                    f"Preamble can only be presented at turn 0 but we found preamble turns at indexes {preamble_turns}."
++                )
+ 
+         is_inference = turns[-1]["role"] != self.OUTPUT_ROLE
+         for turn in turns:
+@@ -294,7 +312,9 @@ class PromptFormatter(ABC):
+             if "content" in turn and len(expected_slots) == 1:
+                 # User is leveraging the "standard" API prompting LLM; we'll map "content" value
+                 # to whatever is the name of the slot, when there's only one slot.
+-                slot_values = {k: turn["content"] for k in expected_slots.keys()}  # 1-item dict
++                slot_values = {
++                    k: turn["content"] for k in expected_slots.keys()
++                }  # 1-item dict
+             else:
+                 slot_values = turn.get("slots", {})
+                 if expected_slots:
+@@ -373,15 +393,17 @@ class PromptFormatter(ABC):
+ 
+         return tokens
+ 
+-    def _validate_slot_values(self, expected: dict[str, Modality], received: dict[str, Any]) -> None:
++    def _validate_slot_values(
++        self, expected: dict[str, Modality], received: dict[str, Any]
++    ) -> None:
+         missing = set(expected) - set(received)
+         assert not missing, f"The following slot values were not provided: {missing}"
+         for slot in expected:
+             expected_modality = expected[slot]
+             value = received[slot]
+-            assert expected_modality.matches(
+-                value
+-            ), f"{slot=} received {value=} which does not match modality {expected_modality}"
++            assert expected_modality.matches(value), (
++                f"{slot=} received {value=} which does not match modality {expected_modality}"
++            )
+ 
+     def _validate_defaults(self):
+         if not self._defaults:
+@@ -391,10 +413,13 @@ class PromptFormatter(ABC):
+         assert isinstance(self._defaults, list)
+         for turn in self._defaults:
+             assert isinstance(turn, dict)
+-            assert "role" in turn, f"{err} Missing required 'role' key. We received {turn=}"
++            assert "role" in turn, (
++                f"{err} Missing required 'role' key. We received {turn=}"
++            )
+             role = turn["role"]
+             assert role in self.get_roles(), (
+-                f"{err} Invalid {role=} in {turn=} - " f"supported roles are: {self.get_roles()}."
++                f"{err} Invalid {role=} in {turn=} - "
++                f"supported roles are: {self.get_roles()}."
+             )
+             if expected_slots := self.get_slots(role):
+                 assert "slots" in turn, (
+diff --git a/nemo/collections/common/tokenizers/aggregate_tokenizer.py b/nemo/collections/common/tokenizers/aggregate_tokenizer.py
+index d5e0eb5d8d..2513a0b648 100644
+--- a/nemo/collections/common/tokenizers/aggregate_tokenizer.py
++++ b/nemo/collections/common/tokenizers/aggregate_tokenizer.py
+@@ -122,14 +122,20 @@ class AggregateTokenizer(TokenizerSpec):
+             tokens = tokens.tolist()
+ 
+         tokenizer = self.tokenizers_dict[lang_id]
+-        return tokenizer.decode_pieces(tokens)
++        return tokenizer.tokens_to_text(tokens)
+ 
+     def ids_to_text(self, ids):
+         if isinstance(ids, (np.ndarray, torch.Tensor)):
+             ids = ids.tolist()
+ 
++        # langs listed in _skip_langs_in_text are stripped from the decoded text
++        # (used to exclude lang-token predictions from WER computation)
++        skip_langs = getattr(self, '_skip_langs_in_text', set())
++
+         tokens = []
+         for id in ids:
++            if skip_langs and self.langs_by_token_id.get(id, '') in skip_langs:
++                continue
+             offset_id = self.offset_token_ids_by_token_id[id]
+             tokenizer = self.tokenizers_by_token_id[id]
+             tokens.extend(tokenizer.ids_to_tokens([offset_id]))
+diff --git a/nemo/collections/tts/modules/audio_codec_modules.py b/nemo/collections/tts/modules/audio_codec_modules.py
+old mode 100755
+new mode 100644
+diff --git a/nemo/core/optim/optimizer_with_main_params.py b/nemo/core/optim/optimizer_with_main_params.py
+old mode 100755
+new mode 100644
+diff --git a/nemo/lightning/callback_group.py b/nemo/lightning/callback_group.py
+index f4c5f2f058..4d367333ea 100644
+--- a/nemo/lightning/callback_group.py
++++ b/nemo/lightning/callback_group.py
+@@ -18,7 +18,7 @@ from typing import Any, Callable, List, Optional
+ 
+ from lightning.pytorch.callbacks import Callback as PTLCallback
+ from nemo.lightning.base_callback import BaseCallback
+-from nemo.lightning.one_logger_callback import OneLoggerNeMoCallback
++# OneLogger training telemetry is unavailable in the NIM runtime container.
+ 
+ 
+ class CallbackGroup:
+@@ -43,7 +43,7 @@ class CallbackGroup:
+         return cls._instance
+ 
+     def __init__(self) -> None:
+-        self._callbacks: List[BaseCallback] = [OneLoggerNeMoCallback()]
++        self._callbacks: List[BaseCallback] = []
+         # Ensure application-end is emitted at most once per process
+         self._app_end_emitted: bool = False
+ 
+diff --git a/scripts/asr_language_modeling/ngram_lm/install_beamsearch_decoders.sh b/scripts/asr_language_modeling/ngram_lm/install_beamsearch_decoders.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/asr_language_modeling/ngram_lm/make_phone_lm.py b/scripts/asr_language_modeling/ngram_lm/make_phone_lm.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/dataset_processing/tts/aishell3/ds_conf/ds_for_fastpitch_align.yaml b/scripts/dataset_processing/tts/aishell3/ds_conf/ds_for_fastpitch_align.yaml
+old mode 100755
+new mode 100644
+diff --git a/scripts/dataset_processing/tts/aishell3/get_data.py b/scripts/dataset_processing/tts/aishell3/get_data.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/dataset_processing/tts/sfbilingual/ds_conf/ds_for_fastpitch_align.yaml b/scripts/dataset_processing/tts/sfbilingual/ds_conf/ds_for_fastpitch_align.yaml
+old mode 100755
+new mode 100644
+diff --git a/scripts/dataset_processing/tts/sfbilingual/get_data.py b/scripts/dataset_processing/tts/sfbilingual/get_data.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/installers/install_ais_cli_latest.sh b/scripts/installers/install_ais_cli_latest.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/installers/install_graphviz.sh b/scripts/installers/install_graphviz.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/installers/install_k2.sh b/scripts/installers/install_k2.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/installers/install_opengrm.sh b/scripts/installers/install_opengrm.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/installers/install_riva_decoder.sh b/scripts/installers/install_riva_decoder.sh
+old mode 100755
+new mode 100644
+diff --git a/scripts/speech_llm/oomptimizer.py b/scripts/speech_llm/oomptimizer.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/speech_recognition/oomptimizer.py b/scripts/speech_recognition/oomptimizer.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/speechlm2/oomptimizer.py b/scripts/speechlm2/oomptimizer.py
+old mode 100755
+new mode 100644
+diff --git a/scripts/tts_dataset_files/de/de_nv230119.dict b/scripts/tts_dataset_files/de/de_nv230119.dict
+old mode 100755
+new mode 100644
+diff --git a/scripts/tts_dataset_files/de/de_nv230119.heteronym b/scripts/tts_dataset_files/de/de_nv230119.heteronym
+old mode 100755
+new mode 100644
+diff --git a/tests/check_copyright_header.py b/tests/check_copyright_header.py
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/ASR_dev_run_Speech_to_Text_Hybrid_RNNT_CTC_Prompt.sh b/tests/functional_tests/ASR_dev_run_Speech_to_Text_Hybrid_RNNT_CTC_Prompt.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Cache_Aware_Infer.sh b/tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Cache_Aware_Infer.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Streaming_Infer.sh b/tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Streaming_Infer.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/L2_TTS_Fast_dev_runs_Magpietts_MoE.sh b/tests/functional_tests/L2_TTS_Fast_dev_runs_Magpietts_MoE.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/L2_TTS_InferEvaluate_Magpietts_MoE_ZeroShot.sh b/tests/functional_tests/L2_TTS_InferEvaluate_Magpietts_MoE_ZeroShot.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/functional_tests/L2_TTS_InferEvaluatelongform_Magpietts_MoE_ZeroShot.sh b/tests/functional_tests/L2_TTS_InferEvaluatelongform_Magpietts_MoE_ZeroShot.sh
+old mode 100755
+new mode 100644
+diff --git a/tests/py_cprheader.txt b/tests/py_cprheader.txt
+old mode 100755
+new mode 100644
+diff --git a/tools/speech_data_explorer/data_explorer.py b/tools/speech_data_explorer/data_explorer.py
+old mode 100755
+new mode 100644
+diff --git a/tools/speech_data_explorer/screenshot.png b/tools/speech_data_explorer/screenshot.png
+old mode 100755
+new mode 100644

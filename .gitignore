@@ -1,0 +1,47 @@
+# Credentials and local configuration
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+secrets/
+hf_token.txt
+ngc_token.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Generated model artifacts
+*.safetensors
+*.ckpt
+*.nemo
+*.riva
+*.rmir
+*.plan
+*.engine
+*.onnx
+*.onnx_data
+model.cache
+
+# Runtime data and deployed repositories
+data/
+models/
+vendor/NeMo/
+audio/
+*.wav
+*.flac
+*.mp3
+
+# Local logs and OS files
+screenlog.*
+session.log
+.DS_Store
+
+# Source transfer archive
+source-export.tgz

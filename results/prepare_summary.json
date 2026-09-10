@@ -1,0 +1,169 @@
+{
+  "source_manifest": "/data/dataset/hi64/hi_manifest_cleaned_final.json",
+  "source_rows": 64,
+  "source_audio_seconds": 442.808,
+  "sample_rate": 16000,
+  "manifests": {
+    "full_c64": {
+      "path": "/data/dataset/chunk_sweep/full/manifest_c64.json",
+      "rows": 64,
+      "audio_seconds": 442.808,
+      "sha256": "335aa8a86ba9478509babaf9ec84d027d6ba21e252ed6198377ff6a384552074"
+    },
+    "full_c128": {
+      "path": "/data/dataset/chunk_sweep/full/manifest_c128.json",
+      "rows": 128,
+      "audio_seconds": 885.616,
+      "sha256": "d22fdae5bd327aeb6a38162bb205f51a17d61d7bc77d24e4dc9034c5a3339ffe"
+    },
+    "full_c256": {
+      "path": "/data/dataset/chunk_sweep/full/manifest_c256.json",
+      "rows": 256,
+      "audio_seconds": 1771.232,
+      "sha256": "f3008411d24ef003cd4372bea65d3f26b0a6d4beac9f1f946014ca091717c9c0"
+    },
+    "5s_c64": {
+      "path": "/data/dataset/chunk_sweep/5s/manifest_c64.json",
+      "rows": 64,
+      "unique_audio_files": 64,
+      "audio_seconds": 320.0,
+      "sha256": "ad247a5c9f4e94bd11c59930424ee355cb4b1020778b743fc889cf0e1a9c2e48"
+    },
+    "5s_c128": {
+      "path": "/data/dataset/chunk_sweep/5s/manifest_c128.json",
+      "rows": 128,
+      "unique_audio_files": 64,
+      "audio_seconds": 640.0,
+      "sha256": "c32e0f88e2173d60ff6c70f4cd702a4d83a0394198274d726d5cf1fcc4fa06ee"
+    },
+    "5s_c256": {
+      "path": "/data/dataset/chunk_sweep/5s/manifest_c256.json",
+      "rows": 256,
+      "unique_audio_files": 64,
+      "audio_seconds": 1280.0,
+      "sha256": "58617a4fbe1bb7c3128519f5059e749d6f57851d08785cf5acfc471320fbe4bc"
+    },
+    "15s_c64": {
+      "path": "/data/dataset/chunk_sweep/15s/manifest_c64.json",
+      "rows": 64,
+      "unique_audio_files": 29,
+      "audio_seconds": 960.0,
+      "sha256": "d2f324dde643e8258c776d5aa42d6d3adc766cd31426bedd1fe8125f3050d675"
+    },
+    "15s_c128": {
+      "path": "/data/dataset/chunk_sweep/15s/manifest_c128.json",
+      "rows": 128,
+      "unique_audio_files": 29,
+      "audio_seconds": 1920.0,
+      "sha256": "9f2cb62314dabc3a40fe930db6721164f43eb70a6cfec448197949a33a97130d"
+    },
+    "15s_c256": {
+      "path": "/data/dataset/chunk_sweep/15s/manifest_c256.json",
+      "rows": 256,
+      "unique_audio_files": 29,
+      "audio_seconds": 3840.0,
+      "sha256": "601933055be4dcffdfa17736f58d747de40fc5789b2337000d23346ebb35b173"
+    },
+    "1s_c64": {
+      "path": "/data/dataset/chunk_sweep/1s/manifest_c64.json",
+      "rows": 64,
+      "total_audio_sec": 64.0,
+      "unique_audio_paths": 64
+    },
+    "1s_c128": {
+      "path": "/data/dataset/chunk_sweep/1s/manifest_c128.json",
+      "rows": 128,
+      "total_audio_sec": 128.0,
+      "unique_audio_paths": 64
+    },
+    "1s_c256": {
+      "path": "/data/dataset/chunk_sweep/1s/manifest_c256.json",
+      "rows": 256,
+      "total_audio_sec": 256.0,
+      "unique_audio_paths": 64
+    }
+  },
+  "5s_pool": {
+    "complete_chunks": 88,
+    "discarded_tail_seconds": 2.808
+  },
+  "15s_pool": {
+    "complete_chunks": 29,
+    "discarded_tail_seconds": 7.808
+  },
+  "1s_pool": {
+    "source_manifest": "/data/dataset/hi64/hi_manifest_cleaned_final.json",
+    "source_rows": 64,
+    "source_audio_sec": 442.808,
+    "exact_chunk_sec": 1.0,
+    "pool_chunks": 442,
+    "discarded_audio_sec": 0.808,
+    "selection": "64 deterministic evenly spaced chunks from full exact-chunk pool",
+    "selected_indices": [
+      0,
+      7,
+      14,
+      21,
+      28,
+      35,
+      42,
+      49,
+      56,
+      63,
+      70,
+      77,
+      84,
+      91,
+      98,
+      105,
+      112,
+      119,
+      126,
+      133,
+      140,
+      147,
+      154,
+      161,
+      168,
+      175,
+      182,
+      189,
+      196,
+      203,
+      210,
+      217,
+      224,
+      231,
+      238,
+      245,
+      252,
+      259,
+      266,
+      273,
+      280,
+      287,
+      294,
+      301,
+      308,
+      315,
+      322,
+      329,
+      336,
+      343,
+      350,
+      357,
+      364,
+      371,
+      378,
+      385,
+      392,
+      399,
+      406,
+      413,
+      420,
+      427,
+      434,
+      441
+    ]
+  }
+}

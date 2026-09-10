@@ -1,0 +1,67 @@
+ M docker/Dockerfile.speech
+ M docker/common/install_dep.sh
+ M docs/check_for_broken_links.sh
+ M docs/source/tools/images/datatable_filter.png
+ M docs/source/tools/images/datatable_sort.png
+ M docs/source/tools/images/datatable_toggle.png
+ M docs/source/tools/images/sde_base_stats.png
+ M docs/source/tools/images/sde_mls_cer.png
+ M docs/source/tools/images/sde_mls_player.png
+ M docs/source/tools/images/sde_mls_words.png
+ M docs/source/tools/images/sde_player.png
+ M docs/source/tools/images/sde_samples.png
+ M docs/source/tools/images/sde_stats.png
+ M docs/source/tools/images/sde_utterances.png
+ M docs/source/tools/images/sde_words.png
+ M docs/update_docs_docker.sh
+ M examples/asr/asr_hybrid_transducer_ctc/speech_to_text_hybrid_rnnt_ctc_bpe.py
+ M examples/asr/conf/fastconformer/hybrid_transducer_ctc/fastconformer_hybrid_tdt_ctc_bpe.yaml
+ M nemo/collections/asr/data/audio_to_text_lhotse_prompt.py
+ M nemo/collections/asr/data/audio_to_text_lhotse_prompted.py
+ M nemo/collections/asr/inference/factory/base_builder.py
+ M nemo/collections/asr/inference/factory/buffered_pipeline_builder.py
+ M nemo/collections/asr/inference/streaming/buffering/incremental_audio_bufferer.py
+ M nemo/collections/asr/inference/utils/enums.py
+ M nemo/collections/asr/metrics/wer.py
+ M nemo/collections/asr/models/aed_multitask_models.py
+ M nemo/collections/asr/models/hybrid_rnnt_ctc_bpe_models_prompt.py
+ M nemo/collections/asr/parts/mixins/mixins.py
+ M nemo/collections/asr/parts/submodules/ctc_decoding.py
+ M nemo/collections/common/data/lhotse/dataloader.py
+ M nemo/collections/common/prompts/canary2.py
+ M nemo/collections/common/prompts/formatter.py
+ M nemo/collections/common/tokenizers/aggregate_tokenizer.py
+ M nemo/collections/tts/modules/audio_codec_modules.py
+ M nemo/core/optim/optimizer_with_main_params.py
+ M nemo/lightning/callback_group.py
+ M scripts/asr_language_modeling/ngram_lm/install_beamsearch_decoders.sh
+ M scripts/asr_language_modeling/ngram_lm/make_phone_lm.py
+ M scripts/dataset_processing/tts/aishell3/ds_conf/ds_for_fastpitch_align.yaml
+ M scripts/dataset_processing/tts/aishell3/get_data.py
+ M scripts/dataset_processing/tts/sfbilingual/ds_conf/ds_for_fastpitch_align.yaml
+ M scripts/dataset_processing/tts/sfbilingual/get_data.py
+ M scripts/installers/install_ais_cli_latest.sh
+ M scripts/installers/install_graphviz.sh
+ M scripts/installers/install_k2.sh
+ M scripts/installers/install_opengrm.sh
+ M scripts/installers/install_riva_decoder.sh
+ M scripts/speech_llm/oomptimizer.py
+ M scripts/speech_recognition/oomptimizer.py
+ M scripts/speechlm2/oomptimizer.py
+ M scripts/tts_dataset_files/de/de_nv230119.dict
+ M scripts/tts_dataset_files/de/de_nv230119.heteronym
+ M tests/check_copyright_header.py
+ M tests/functional_tests/ASR_dev_run_Speech_to_Text_Hybrid_RNNT_CTC_Prompt.sh
+ M tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Cache_Aware_Infer.sh
+ M tests/functional_tests/L2_Speech_Transcription_Speech_to_Text_Streaming_Infer.sh
+ M tests/functional_tests/L2_TTS_Fast_dev_runs_Magpietts_MoE.sh
+ M tests/functional_tests/L2_TTS_InferEvaluate_Magpietts_MoE_ZeroShot.sh
+ M tests/functional_tests/L2_TTS_InferEvaluatelongform_Magpietts_MoE_ZeroShot.sh
+ M tests/py_cprheader.txt
+ M tools/speech_data_explorer/data_explorer.py
+ M tools/speech_data_explorer/screenshot.png
+?? .claude/
+?? docker/Dockerfile.speech.avlm
+?? nemo/collections/asr/inference/model_wrappers/aed_inference_wrapper.py
+?? nemo/collections/asr/inference/pipelines/buffered_aed_pipeline.py
+?? nemo/collections/common/tokenizers/canary_multilingual_tokenizer.py

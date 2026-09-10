@@ -1,0 +1,224 @@
+{
+  "method": "one client iteration, exactly N manifest rows, N parallel requests, two trials",
+  "records": [
+    {
+      "duration": "1s",
+      "concurrency": 64,
+      "trial": 1,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c64.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c64_trial1.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c64_trial1.log",
+      "run_time_sec": 0.55348,
+      "total_audio_sec": 64.0,
+      "rtfx": 115.63,
+      "latency_ms": {
+        "median": 332.39,
+        "p90": 548.8,
+        "p95": 549.51,
+        "p99": 552.07,
+        "average": 418.75
+      },
+      "wall_time_sec": 0.5709497928619385,
+      "response_rows": 64,
+      "nonempty_transcripts": 64,
+      "triton_inference_delta": 64,
+      "triton_execution_delta": 3,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "27": 1,
+        "36": 1
+      }
+    },
+    {
+      "duration": "1s",
+      "concurrency": 64,
+      "trial": 2,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c64.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c64_trial2.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c64_trial2.log",
+      "run_time_sec": 0.52811,
+      "total_audio_sec": 64.0,
+      "rtfx": 121.19,
+      "latency_ms": {
+        "median": 517.09,
+        "p90": 523.45,
+        "p95": 524.43,
+        "p99": 525.64,
+        "average": 404.45
+      },
+      "wall_time_sec": 0.5436484813690186,
+      "response_rows": 64,
+      "nonempty_transcripts": 64,
+      "triton_inference_delta": 64,
+      "triton_execution_delta": 3,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "31": 1,
+        "32": 1
+      }
+    },
+    {
+      "duration": "1s",
+      "concurrency": 128,
+      "trial": 1,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c128.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c128_trial1.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c128_trial1.log",
+      "run_time_sec": 0.86686,
+      "total_audio_sec": 128.0,
+      "rtfx": 147.66,
+      "latency_ms": {
+        "median": 674.7,
+        "p90": 855.77,
+        "p95": 857.78,
+        "p99": 860.03,
+        "average": 601.83
+      },
+      "wall_time_sec": 0.8858137130737305,
+      "response_rows": 128,
+      "nonempty_transcripts": 128,
+      "triton_inference_delta": 128,
+      "triton_execution_delta": 4,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "23": 1,
+        "40": 1,
+        "64": 1
+      }
+    },
+    {
+      "duration": "1s",
+      "concurrency": 128,
+      "trial": 2,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c128.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c128_trial2.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c128_trial2.log",
+      "run_time_sec": 0.87371,
+      "total_audio_sec": 128.0,
+      "rtfx": 146.5,
+      "latency_ms": {
+        "median": 650.92,
+        "p90": 864.54,
+        "p95": 865.95,
+        "p99": 867.11,
+        "average": 595.62
+      },
+      "wall_time_sec": 0.8928959369659424,
+      "response_rows": 128,
+      "nonempty_transcripts": 128,
+      "triton_inference_delta": 128,
+      "triton_execution_delta": 4,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "28": 1,
+        "35": 1,
+        "64": 1
+      }
+    },
+    {
+      "duration": "1s",
+      "concurrency": 256,
+      "trial": 1,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c256.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c256_trial1.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c256_trial1.log",
+      "run_time_sec": 1.4585,
+      "total_audio_sec": 256.0,
+      "rtfx": 175.52,
+      "latency_ms": {
+        "median": 950.79,
+        "p90": 1441.7,
+        "p95": 1444.3,
+        "p99": 1446.6,
+        "average": 904.2
+      },
+      "wall_time_sec": 1.4867143630981445,
+      "response_rows": 256,
+      "nonempty_transcripts": 256,
+      "triton_inference_delta": 256,
+      "triton_execution_delta": 6,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "26": 1,
+        "37": 1,
+        "64": 3
+      }
+    },
+    {
+      "duration": "1s",
+      "concurrency": 256,
+      "trial": 2,
+      "manifest": "/data/dataset/chunk_sweep/1s/manifest_c256.json",
+      "output": "/data/dataset/chunk_sweep/results/1s_c256_trial2.json",
+      "log": "/data/dataset/chunk_sweep/logs/1s_c256_trial2.log",
+      "run_time_sec": 1.4966,
+      "total_audio_sec": 256.0,
+      "rtfx": 171.05,
+      "latency_ms": {
+        "median": 964.75,
+        "p90": 1478.2,
+        "p95": 1481.3,
+        "p99": 1483.6,
+        "average": 931.73
+      },
+      "wall_time_sec": 1.5266015529632568,
+      "response_rows": 256,
+      "nonempty_transcripts": 256,
+      "triton_inference_delta": 256,
+      "triton_execution_delta": 6,
+      "triton_batch_size_counts_delta": {
+        "1": 1,
+        "29": 1,
+        "34": 1,
+        "64": 3
+      }
+    }
+  ],
+  "aggregates": [
+    {
+      "duration": "1s",
+      "concurrency": 64,
+      "trials": 2,
+      "audio_seconds": 64.0,
+      "rtfx_median": 118.41,
+      "rtfx_min": 115.63,
+      "rtfx_max": 121.19,
+      "run_seconds_median": 0.5407949999999999,
+      "latency_median_ms": 424.74,
+      "p95_ms_median": 536.97,
+      "executions_median": 3.0,
+      "all_outputs_present": true,
+      "all_predictions_nonempty": true
+    },
+    {
+      "duration": "1s",
+      "concurrency": 128,
+      "trials": 2,
+      "audio_seconds": 128.0,
+      "rtfx_median": 147.07999999999998,
+      "rtfx_min": 146.5,
+      "rtfx_max": 147.66,
+      "run_seconds_median": 0.870285,
+      "latency_median_ms": 662.81,
+      "p95_ms_median": 861.865,
+      "executions_median": 4.0,
+      "all_outputs_present": true,
+      "all_predictions_nonempty": true
+    },
+    {
+      "duration": "1s",
+      "concurrency": 256,
+      "trials": 2,
+      "audio_seconds": 256.0,
+      "rtfx_median": 173.28500000000003,
+      "rtfx_min": 171.05,
+      "rtfx_max": 175.52,
+      "run_seconds_median": 1.47755,
+      "latency_median_ms": 957.77,
+      "p95_ms_median": 1462.8,
+      "executions_median": 6.0,
+      "all_outputs_present": true,
+      "all_predictions_nonempty": true
+    }
+  ]
+}

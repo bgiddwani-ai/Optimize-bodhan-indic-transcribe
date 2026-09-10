@@ -1,0 +1,1 @@
+python3 shuffle_dataset_utils/reate_manifests.py --input_path /home/CanaryNIM-Bharat-Final/dataset/hi_manifest_cleaned_final.json /home/CanaryNIM-Bharat-Final/dataset/hi_manifest_cleaned_final_sorted_mf.json /home/CanaryNIM-Bharat-Final/dataset/hi_manifest_cleaned_final_worst_mf.json /home/CanaryNIM-Bharat-Final/dataset/hi_manifest_cleaned_final_sampled_mf.json
