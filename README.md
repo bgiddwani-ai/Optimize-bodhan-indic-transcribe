@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Indic-Transcribe Flex: NeMo, TensorRT, and Riva optimization
 
 This repository preserves the code and measured evidence used to convert [`bodhan-ai/indic-transcribe-flex`](https://huggingface.co/bodhan-ai/indic-transcribe-flex) from its Hugging Face Safetensors checkpoint into a NeMo `EncDecMultiTaskModel`, export it to Riva, build TensorRT and TensorRT-LLM engines, deploy an RMIR model repository, run Riva/Triton, and benchmark the service.
@@ -246,7 +245,3 @@ Detailed observations and improvement priorities are in [`LEARNINGS.md`](LEARNIN
 ## Licensing
 
 The Flex checkpoint uses the Indic Open Model License and inherits terms from its Canary base model. NeMo and nemo2riva retain their upstream licenses. Review all model, NGC container, and source-code licenses before redistributing artifacts or operating a hosted API.
-=======
-# Optimize-bodhan-indic-transcribe
-Optimize canary with NIM
->>>>>>> 80f422273734f6dd4905b852ef3edd71f7463998
