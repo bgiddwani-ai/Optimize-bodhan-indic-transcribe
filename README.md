@@ -35,8 +35,6 @@ Generated model weights and engines are intentionally excluded. Rebuilding them 
 | NeMo source revision | `801051a88f11a97b8606212632db71b90606435d` plus `third_party/nemo-local.patch` and `nemo_overlay/` |
 | nemo2riva revision | `68c578f0a5e617d97578d2041b9a37d4409d3879` |
 
-The generated `/data` tree occupied approximately 22 GB, the Flex checkpoint 4.6 GB, and the unpacked base Canary archive 3.8 GB. Container layers require additional space; start with at least 100 GB free.
-
 ## Installation
 
 ### 1. Prerequisites
@@ -56,8 +54,6 @@ unset NGC_API_KEY
 ```
 
 ### 2. Reconstruct the supplied NeMo source
-
-The 587 MB third-party checkout is represented by a pinned upstream commit, a tracked patch, and four added files:
 
 ```bash
 ./scripts/reconstruct_nemo.sh "$PWD/vendor/NeMo"
