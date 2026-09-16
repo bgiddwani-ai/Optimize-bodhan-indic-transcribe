@@ -24,8 +24,7 @@ Generated model weights and engines are intentionally excluded. Rebuilding them 
 
 | Component | Validated value |
 |---|---|
-| Host | Brev `minimum-fuchsia-mule` |
-| GPU inventory | 2 × NVIDIA H100 NVL |
+| GPU inventory | 1 × NVIDIA H100 NVL |
 | Deployed replica | GPU 1 only |
 | Container | `nvcr.io/nim/nvidia/canary-1b:latest` |
 | Riva | 2.24.0 |
